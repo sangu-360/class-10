@@ -1,0 +1,5 @@
+{
+  "name": "CodeInsight AI",
+  "description": "An intelligent coding assistant for Python, SQL, Excel, and PowerBI DAX. Features split-screen structured answers, code visualization, and simulated execution against a demo database.",
+  "requestFramePermissions": []
+}
