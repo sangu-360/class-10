@@ -44,6 +44,17 @@ export default function App() {
     setReviewData(null);
   };
 
+  const handleAddTest = async (test: Test) => {
+    try {
+      await supabaseService.addTest(test);
+      const updatedTests = await supabaseService.getTests();
+      setTests(updatedTests);
+    } catch (error) {
+      console.error('Error adding test:', error);
+      alert('Failed to add test to database.');
+    }
+  };
+
   const handleTestSubmit = async (attempt: TestAttempt) => {
     try {
       await supabaseService.addAttempt(attempt);
@@ -70,7 +81,7 @@ export default function App() {
   }
 
   if (user.role === 'teacher') {
-    return <TeacherDashboard user={user} tests={tests} attempts={attempts} onLogout={handleLogout} />;
+    return <TeacherDashboard user={user} tests={tests} attempts={attempts} onAddTest={handleAddTest} onLogout={handleLogout} />;
   }
 
   if (activeTest) {

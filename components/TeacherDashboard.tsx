@@ -3,21 +3,8 @@ import { Test, TestAttempt, Subject, Question, Faculty, SubjectReg, StudentReg, 
 import { 
   Plus, Users, BarChart3, Settings, Sparkles, X, Code2, UserPlus, 
   BookOpen, GraduationCap, Lock, Unlock, Building2, FileSpreadsheet, 
-  Upload, Download, ShieldAlert, Clock, CheckCircle2, AlertCircle,
-  TrendingUp, LayoutDashboard, BookMarked
+  Upload, Download, ShieldAlert 
 } from 'lucide-react';
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
-  ResponsiveContainer,
-  AreaChart,
-  Area
-} from 'recharts';
 import Papa from 'papaparse';
 import { generateQuestions, generateCodingQuestions } from '../services/groqService';
 import TestReview from './TestReview';
@@ -29,13 +16,24 @@ interface Props {
   user: { role: Role, name: string, data?: any };
   tests: Test[];
   attempts: TestAttempt[];
+  onAddTest: (test: Test) => void;
   onLogout: () => void;
 }
 
-export default function TeacherDashboard({ user, tests, attempts, onLogout }: Props) {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'faculty-reg' | 'subject-reg' | 'student-reg' | 'branch-reg'>('analytics');
-  const [analyticsSubTab, setAnalyticsSubTab] = useState<'overview' | 'ongoing' | 'pending' | 'previous' | 'malpractice' | 'student' | 'faculty'>('overview');
+export default function TeacherDashboard({ user, tests, attempts, onAddTest, onLogout }: Props) {
+  const [activeTab, setActiveTab] = useState<'manage' | 'analytics' | 'create' | 'faculty-reg' | 'subject-reg' | 'student-reg' | 'branch-reg'>('analytics');
+  const [analyticsSubTab, setAnalyticsSubTab] = useState<'overview' | 'test' | 'student' | 'subject' | 'faculty' | 'section'>('overview');
   const [reviewAttempt, setReviewAttempt] = useState<{test: Test, attempt: TestAttempt} | null>(null);
+
+  const [newTest, setNewTest] = useState<Partial<Test>>({
+    title: '', subject: 'Java', durationMinutes: 60, passMarks: 40, questions: [],
+    topic: '', subjectCode: '', subjectName: '', facultyName: user.name, facultyId: user.data?.id || '', collaborators: [], scheduledTime: '',
+    targetBranch: '', targetSection: ''
+  });
+  const [aiTopic, setAiTopic] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedQs, setGeneratedQs] = useState<(Question & {selected: boolean})[]>([]);
+  const [errorMessage, setErrorMessage] = useState('');
 
   // Collaboration Requests
   const [collabRequests, setCollabRequests] = useState<any[]>([]);
@@ -122,6 +120,63 @@ export default function TeacherDashboard({ user, tests, attempts, onLogout }: Pr
       console.error('Error rejecting invite:', error);
       alert('Failed to reject invite.');
     }
+  };
+
+  const handleGenerateAI = async (type: 'mcq' | 'coding') => {
+    if (!aiTopic || !newTest.subject) return;
+    setIsGenerating(true);
+    setErrorMessage('');
+    try {
+      let qs;
+      if (type === 'coding') {
+        qs = await generateCodingQuestions(newTest.subject, aiTopic, 1);
+      } else {
+        qs = await generateQuestions(newTest.subject, aiTopic, 3);
+      }
+      setGeneratedQs(qs.map((q: any) => ({ ...q, id: Date.now().toString() + Math.random(), marks: 10, selected: true })));
+    } catch (e) {
+      setErrorMessage("Failed to generate questions. Check API key.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleAddSelectedAI = () => {
+    const selected = generatedQs.filter(q => q.selected);
+    setNewTest(prev => ({ ...prev, questions: [...(prev.questions || []), ...selected] }));
+    setGeneratedQs([]);
+    setAiTopic('');
+  };
+
+  const handleSaveTest = () => {
+    if (!newTest.title || !newTest.questions?.length) {
+      setErrorMessage("Please provide a title and at least one question.");
+      return;
+    }
+    
+    let finalScheduledTime = newTest.scheduledTime;
+    if (finalScheduledTime) {
+      // Convert local datetime string to ISO string with timezone
+      const localDate = new Date(finalScheduledTime);
+      if (!isNaN(localDate.getTime())) {
+        finalScheduledTime = localDate.toISOString();
+      }
+    }
+
+    onAddTest({ 
+      ...newTest, 
+      id: Date.now().toString(), 
+      scheduledTime: finalScheduledTime || null,
+      durationMinutes: Number(newTest.durationMinutes) || 60,
+      passMarks: Number(newTest.passMarks) || 40,
+      questions: newTest.questions?.map(q => ({
+        ...q,
+        marks: Number(q.marks) || 10
+      }))
+    } as Test);
+    setActiveTab('manage');
+    setNewTest({ title: '', subject: 'Java', durationMinutes: 60, passMarks: 40, questions: [], topic: '', subjectCode: '', subjectName: '', facultyName: user.name, facultyId: user.data?.id || '', collaborators: [], scheduledTime: '', targetBranch: '', targetSection: '' });
+    setErrorMessage('');
   };
 
   const handleAddFaculty = async () => {
@@ -248,13 +303,19 @@ export default function TeacherDashboard({ user, tests, attempts, onLogout }: Pr
           <p className="text-[10px] text-slate-500 mt-2 uppercase tracking-widest font-semibold">Atria Institute of Technology</p>
         </div>
         <nav className="flex-1 p-4 space-y-1">
-          <button onClick={() => setActiveTab('analytics')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === 'analytics' ? 'bg-ink text-white shadow-md' : 'text-slate-600 hover:bg-black/5'}`}>
-            <LayoutDashboard size={18} /> Analytics Dashboard
+          <button onClick={() => setActiveTab('analytics')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === 'analytics' ? 'bg-ink text-white' : 'text-slate-600 hover:bg-black/5'}`}>
+            <BarChart3 size={18} /> Analytics & Leaderboard
+          </button>
+          <button onClick={() => setActiveTab('manage')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === 'manage' ? 'bg-ink text-white' : 'text-slate-600 hover:bg-black/5'}`}>
+            <Users size={18} /> Manage Tests
+          </button>
+          <button onClick={() => setActiveTab('create')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === 'create' ? 'bg-ink text-white' : 'text-slate-600 hover:bg-black/5'}`}>
+            <Plus size={18} /> Create New Test
           </button>
           
           {!isAdmin && (
             <div className="pt-4 mt-4 border-t border-black/5">
-              <button onClick={() => setShowPinDialog(true)} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200">
+              <button onClick={() => setShowPinDialog(true)} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors text-slate-600 hover:bg-black/5">
                 <Lock size={18} /> Admin Access
               </button>
             </div>
@@ -265,16 +326,16 @@ export default function TeacherDashboard({ user, tests, attempts, onLogout }: Pr
               <div className="pt-6 pb-2">
                 <p className="px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Admin Registrations</p>
               </div>
-              <button onClick={() => setActiveTab('branch-reg')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === 'branch-reg' ? 'bg-ink text-white shadow-md' : 'text-slate-600 hover:bg-black/5'}`}>
+              <button onClick={() => setActiveTab('branch-reg')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === 'branch-reg' ? 'bg-ink text-white' : 'text-slate-600 hover:bg-black/5'}`}>
                 <Building2 size={18} /> Branch / Dept
               </button>
-              <button onClick={() => setActiveTab('faculty-reg')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === 'faculty-reg' ? 'bg-ink text-white shadow-md' : 'text-slate-600 hover:bg-black/5'}`}>
+              <button onClick={() => setActiveTab('faculty-reg')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === 'faculty-reg' ? 'bg-ink text-white' : 'text-slate-600 hover:bg-black/5'}`}>
                 <UserPlus size={18} /> Faculty
               </button>
-              <button onClick={() => setActiveTab('subject-reg')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === 'subject-reg' ? 'bg-ink text-white shadow-md' : 'text-slate-600 hover:bg-black/5'}`}>
-                <BookMarked size={18} /> Subject
+              <button onClick={() => setActiveTab('subject-reg')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === 'subject-reg' ? 'bg-ink text-white' : 'text-slate-600 hover:bg-black/5'}`}>
+                <BookOpen size={18} /> Subject
               </button>
-              <button onClick={() => setActiveTab('student-reg')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === 'student-reg' ? 'bg-ink text-white shadow-md' : 'text-slate-600 hover:bg-black/5'}`}>
+              <button onClick={() => setActiveTab('student-reg')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === 'student-reg' ? 'bg-ink text-white' : 'text-slate-600 hover:bg-black/5'}`}>
                 <GraduationCap size={18} /> Student
               </button>
               <div className="pt-4 mt-4 border-t border-black/5">
@@ -283,7 +344,9 @@ export default function TeacherDashboard({ user, tests, attempts, onLogout }: Pr
                 </button>
                 <button onClick={() => {
                   setIsAdmin(false);
-                  setActiveTab('analytics');
+                  if (['faculty-reg', 'subject-reg', 'student-reg', 'branch-reg'].includes(activeTab)) {
+                    setActiveTab('analytics');
+                  }
                 }} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors text-slate-600 hover:bg-black/5">
                   <Lock size={18} /> Lock Admin
                 </button>
@@ -301,23 +364,14 @@ export default function TeacherDashboard({ user, tests, attempts, onLogout }: Pr
           <div className="max-w-6xl mx-auto">
             <h1 className="text-3xl font-serif text-ink mb-6">Analytics Dashboard</h1>
             
-            <div className="flex gap-2 mb-6 border-b border-black/10 pb-2 overflow-x-auto scrollbar-hide">
-              {[
-                { id: 'overview', label: 'Leaderboard', icon: TrendingUp },
-                { id: 'ongoing', label: 'Ongoing', icon: Clock },
-                { id: 'pending', label: 'Pending', icon: AlertCircle },
-                { id: 'previous', label: 'Previous', icon: CheckCircle2 },
-                { id: 'malpractice', label: 'Malpractice', icon: ShieldAlert },
-                { id: 'student', label: 'Student Wise', icon: GraduationCap },
-                { id: 'faculty', label: 'Faculty Wise', icon: UserPlus },
-              ].map(tab => (
+            <div className="flex gap-2 mb-6 border-b border-black/10 pb-2 overflow-x-auto">
+              {['overview', 'test', 'student', 'subject', 'faculty', 'section'].map(tab => (
                 <button 
-                  key={tab.id}
-                  onClick={() => setAnalyticsSubTab(tab.id as any)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${analyticsSubTab === tab.id ? 'bg-ink text-white shadow-md' : 'text-slate-600 hover:bg-black/5'}`}
+                  key={tab}
+                  onClick={() => setAnalyticsSubTab(tab as any)}
+                  className={`px-4 py-2 rounded-md text-sm font-medium capitalize transition-colors whitespace-nowrap ${analyticsSubTab === tab ? 'bg-ink text-white' : 'text-slate-600 hover:bg-black/5'}`}
                 >
-                  <tab.icon size={16} />
-                  {tab.label}
+                  {tab === 'overview' ? 'Leaderboard' : `${tab} Wise`}
                 </button>
               ))}
             </div>
@@ -425,258 +479,581 @@ export default function TeacherDashboard({ user, tests, attempts, onLogout }: Pr
               </>
             )}
 
-            {analyticsSubTab === 'ongoing' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xl font-serif font-semibold text-ink flex items-center gap-2">
-                    <Clock className="text-amber-600" /> Ongoing Tests
-                  </h3>
-                  <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-xs font-bold animate-pulse">LIVE NOW</span>
+            {analyticsSubTab === 'test' && (
+              <div className="bg-white rounded-xl border border-black/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] overflow-hidden">
+                <div className="p-6 border-b border-black/5 bg-paper/30">
+                  <h3 className="text-lg font-serif font-semibold text-ink">Test Wise Analysis</h3>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {tests.filter(t => {
-                    const start = new Date(t.scheduledTime);
-                    const end = new Date(start.getTime() + t.durationMinutes * 60000);
-                    const now = new Date();
-                    return start <= now && now < end;
-                  }).map(test => (
-                    <div key={test.id} className="bg-white p-6 rounded-xl border-l-4 border-amber-500 shadow-sm">
-                      <h4 className="text-lg font-serif font-bold text-ink mb-2">{test.title}</h4>
-                      <div className="grid grid-cols-2 gap-4 text-sm text-slate-600">
-                        <p><span className="font-semibold">Subject:</span> {test.subjectName}</p>
-                        <p><span className="font-semibold">Faculty:</span> {test.facultyName}</p>
-                        <p><span className="font-semibold">Started:</span> {new Date(test.scheduledTime).toLocaleTimeString()}</p>
-                        <p><span className="font-semibold">Duration:</span> {test.durationMinutes}m</p>
-                      </div>
-                      <div className="mt-4 pt-4 border-t border-slate-100">
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Active Students</p>
-                        <div className="flex items-center gap-2">
-                          <div className="h-2 flex-1 bg-slate-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-amber-500 w-2/3"></div>
-                          </div>
-                          <span className="text-xs font-mono font-bold text-amber-600">Monitoring...</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  {tests.filter(t => {
-                    const start = new Date(t.scheduledTime);
-                    const end = new Date(start.getTime() + t.durationMinutes * 60000);
-                    const now = new Date();
-                    return start <= now && now < end;
-                  }).length === 0 && (
-                    <div className="col-span-2 bg-white p-12 rounded-xl border border-dashed border-slate-300 text-center">
-                      <Clock size={48} className="mx-auto text-slate-300 mb-4" />
-                      <p className="text-slate-500 font-serif">No tests are currently in progress.</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {analyticsSubTab === 'pending' && (
-              <div className="space-y-6">
-                <h3 className="text-xl font-serif font-semibold text-ink flex items-center gap-2">
-                  <AlertCircle className="text-blue-600" /> Upcoming Tests
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {tests.filter(t => new Date(t.scheduledTime) > new Date()).sort((a,b) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime()).map(test => (
-                    <div key={test.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-colors">
-                      <div className="flex justify-between items-start mb-3">
-                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">Scheduled</span>
-                        <Clock size={16} className="text-slate-400" />
-                      </div>
-                      <h4 className="font-serif font-bold text-ink mb-2">{test.title}</h4>
-                      <div className="space-y-1 text-xs text-slate-500">
-                        <p className="flex justify-between"><span>Date:</span> <span className="font-medium text-slate-700">{new Date(test.scheduledTime).toLocaleDateString()}</span></p>
-                        <p className="flex justify-between"><span>Time:</span> <span className="font-medium text-slate-700">{new Date(test.scheduledTime).toLocaleTimeString()}</span></p>
-                        <p className="flex justify-between"><span>Subject:</span> <span className="font-medium text-slate-700">{test.subjectName}</span></p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {analyticsSubTab === 'previous' && (
-              <div className="space-y-6">
-                <h3 className="text-xl font-serif font-semibold text-ink flex items-center gap-2">
-                  <CheckCircle2 className="text-emerald-600" /> Completed Tests
-                </h3>
-                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 text-slate-500 text-[10px] uppercase tracking-widest border-b border-slate-200">
-                        <th className="p-4 font-bold">Test Title</th>
-                        <th className="p-4 font-bold">Date</th>
-                        <th className="p-4 font-bold">Subject</th>
-                        <th className="p-4 font-bold">Attempts</th>
-                        <th className="p-4 font-bold">Avg Score</th>
-                        <th className="p-4 font-bold">Pass Rate</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tests.filter(t => {
-                        const start = new Date(t.scheduledTime);
-                        const end = new Date(start.getTime() + t.durationMinutes * 60000);
-                        return end <= new Date();
-                      }).map(test => {
-                        const testAttempts = attempts.filter(a => a.testId === test.id);
-                        const avgScore = testAttempts.length ? Math.round(testAttempts.reduce((sum, a) => sum + (a.score/a.totalMarks)*100, 0) / testAttempts.length) : 0;
-                        const passRate = testAttempts.length ? Math.round((testAttempts.filter(a => a.passed).length / testAttempts.length) * 100) : 0;
-                        return (
-                          <tr key={test.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                            <td className="p-4 font-medium text-ink">{test.title}</td>
-                            <td className="p-4 text-slate-500 text-sm">{new Date(test.scheduledTime).toLocaleDateString()}</td>
-                            <td className="p-4 text-slate-500 text-sm">{test.subjectName}</td>
-                            <td className="p-4 font-mono text-sm">{testAttempts.length}</td>
-                            <td className="p-4 font-mono text-sm">{avgScore}%</td>
-                            <td className="p-4">
-                              <span className={`px-2 py-1 rounded-md text-xs font-bold ${passRate >= 70 ? 'text-emerald-700 bg-emerald-50' : 'text-amber-700 bg-amber-50'}`}>
-                                {passRate}%
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {analyticsSubTab === 'malpractice' && (
-              <div className="space-y-6">
-                <h3 className="text-xl font-serif font-semibold text-ink flex items-center gap-2">
-                  <ShieldAlert className="text-red-600" /> Malpractice Incidents
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {attempts.filter(a => a.malpracticeCount && a.malpracticeCount > 0).sort((a,b) => (b.malpracticeCount || 0) - (a.malpracticeCount || 0)).map(att => {
-                    const test = tests.find(t => t.id === att.testId);
+                <div className="p-6">
+                  {tests.map(test => {
+                    const testAttempts = attempts.filter(a => a.testId === test.id);
+                    const passRate = testAttempts.length ? Math.round((testAttempts.filter(a => a.passed).length / testAttempts.length) * 100) : 0;
                     return (
-                      <div key={att.id} className="bg-white p-6 rounded-xl border border-red-100 shadow-sm flex items-start gap-4">
-                        <div className="bg-red-50 p-3 rounded-lg text-red-600">
-                          <ShieldAlert size={24} />
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex justify-between items-start">
-                            <h4 className="font-bold text-ink">{att.studentName}</h4>
-                            <span className="bg-red-600 text-white px-2 py-1 rounded text-xs font-bold">{att.malpracticeCount} Incidents</span>
+                      <div key={test.id} className="mb-6 border border-black/10 rounded-lg p-6 bg-paper/20">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h4 className="font-serif text-xl font-semibold text-ink mb-1">{test.title}</h4>
+                            <p className="text-sm text-slate-500 font-mono">ID: {test.id}</p>
                           </div>
-                          <p className="text-sm text-slate-500 mb-2">Test: <span className="font-medium text-slate-700">{test?.title}</span></p>
-                          <div className="bg-slate-50 p-3 rounded text-xs text-slate-600 font-mono">
-                            Detected multiple window switches and suspicious behavior during the examination.
+                          <div className="text-right">
+                            <p className="text-sm text-slate-500 uppercase tracking-wider font-medium mb-1">Total Attempts: {testAttempts.length}</p>
+                            <p className="text-lg font-mono text-ink">Pass Rate: {passRate}%</p>
                           </div>
                         </div>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                          <div className="bg-white p-3 rounded border border-black/5">
+                            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Topic</p>
+                            <p className="text-sm font-medium text-ink">{test.topic || '-'}</p>
+                          </div>
+                          <div className="bg-white p-3 rounded border border-black/5">
+                            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Subject</p>
+                            <p className="text-sm font-medium text-ink">{test.subjectName || test.subject} {test.subjectCode ? `(${test.subjectCode})` : ''}</p>
+                          </div>
+                          <div className="bg-white p-3 rounded border border-black/5">
+                            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Faculty</p>
+                            <p className="text-sm font-medium text-ink">{test.facultyName || '-'} {test.facultyId ? `(${test.facultyId})` : ''}</p>
+                          </div>
+                          <div className="bg-white p-3 rounded border border-black/5">
+                            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Questions</p>
+                            <p className="text-sm font-medium text-ink">{test.questions.length}</p>
+                          </div>
+                        </div>
+
+                        {testAttempts.length > 0 ? (
+                          <table className="w-full text-left border-collapse text-sm">
+                            <thead>
+                              <tr className="bg-white text-slate-500 text-xs uppercase tracking-wider border-b border-black/5">
+                                <th className="p-3 font-semibold">Student</th>
+                                <th className="p-3 font-semibold">Score</th>
+                                <th className="p-3 font-semibold">Status</th>
+                                <th className="p-3 font-semibold text-red-600">Malpractice</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white">
+                              {testAttempts.map(att => (
+                                <tr key={att.id} className="border-b border-black/5">
+                                  <td className="p-3 text-slate-700">{att.studentName}</td>
+                                  <td className="p-3 font-mono text-slate-600">{att.score} / {att.totalMarks}</td>
+                                  <td className="p-3">
+                                    <span className={`px-2 py-1 rounded-md text-xs font-medium ${att.passed ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                                      {att.passed ? 'Passed' : 'Failed'}
+                                    </span>
+                                  </td>
+                                  <td className="p-3">
+                                    {att.malpracticeCount && att.malpracticeCount > 0 ? (
+                                      <span className="flex items-center gap-1 text-red-600 font-bold animate-pulse">
+                                        <ShieldAlert size={14} /> {att.malpracticeCount}
+                                      </span>
+                                    ) : (
+                                      <span className="text-emerald-600 text-xs">None</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <p className="text-sm text-slate-500 italic">No attempts for this test yet.</p>
+                        )}
                       </div>
                     );
                   })}
-                  {attempts.filter(a => a.malpracticeCount && a.malpracticeCount > 0).length === 0 && (
-                    <div className="col-span-2 bg-white p-12 rounded-xl border border-dashed border-slate-300 text-center">
-                      <CheckCircle2 size={48} className="mx-auto text-emerald-300 mb-4" />
-                      <p className="text-slate-500 font-serif">No malpractice incidents detected. All clear!</p>
-                    </div>
-                  )}
+                  {tests.length === 0 && <p className="text-center text-slate-500 py-8 text-sm">No tests available.</p>}
                 </div>
               </div>
             )}
 
             {analyticsSubTab === 'student' && (
-              <div className="space-y-8">
-                <h3 className="text-xl font-serif font-semibold text-ink flex items-center gap-2">
-                  <TrendingUp className="text-indigo-600" /> Student Performance Trends
-                </h3>
-                {Object.entries(attempts.reduce((acc, att) => {
-                  if (!acc[att.studentName]) acc[att.studentName] = [];
-                  acc[att.studentName].push(att);
-                  return acc;
-                }, {} as Record<string, TestAttempt[]>)).map(([student, studentAttempts]) => {
-                  const chartData = studentAttempts.map(att => ({
-                    test: tests.find(t => t.id === att.testId)?.title || 'Test',
-                    score: Math.round((att.score / att.totalMarks) * 100)
-                  }));
+              <div className="bg-white rounded-xl border border-black/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] overflow-hidden">
+                <div className="p-6 border-b border-black/5 bg-paper/30">
+                  <h3 className="text-lg font-serif font-semibold text-ink">Student Wise Analysis</h3>
+                </div>
+                <div className="p-6">
+                  {Object.entries(attempts.reduce((acc, att) => {
+                    if (!acc[att.studentName]) acc[att.studentName] = [];
+                    acc[att.studentName].push(att);
+                    return acc;
+                  }, {} as Record<string, TestAttempt[]>)).map(([student, studentAttempts]) => (
+                    <div key={student} className="mb-6 border border-black/10 rounded-lg p-6 bg-paper/20">
+                      <h4 className="font-serif text-xl font-semibold text-ink mb-2">{student}</h4>
+                      <p className="text-sm text-slate-500 mb-4 uppercase tracking-wider font-medium">Total Attempts: {studentAttempts.length} | Average Score: {Math.round(studentAttempts.reduce((sum, a) => sum + (a.score/a.totalMarks)*100, 0) / studentAttempts.length)}%</p>
+                      <table className="w-full text-left border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-white text-slate-500 text-xs uppercase tracking-wider border-b border-black/5">
+                            <th className="p-3 font-semibold">Test</th>
+                            <th className="p-3 font-semibold">Score</th>
+                            <th className="p-3 font-semibold">Status</th>
+                            <th className="p-3 font-semibold text-red-600">Malpractice</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white">
+                          {studentAttempts.map(att => {
+                            const test = tests.find(t => t.id === att.testId);
+                            return (
+                              <tr key={att.id} className="border-b border-black/5">
+                                <td className="p-3 text-slate-700">{test?.title || 'Unknown Test'}</td>
+                                <td className="p-3 font-mono text-slate-600">{att.score} / {att.totalMarks}</td>
+                                <td className="p-3">
+                                  <span className={`px-2 py-1 rounded-md text-xs font-medium ${att.passed ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                                    {att.passed ? 'Passed' : 'Failed'}
+                                  </span>
+                                </td>
+                                <td className="p-3">
+                                  {att.malpracticeCount && att.malpracticeCount > 0 ? (
+                                    <span className="flex items-center gap-1 text-red-600 font-bold">
+                                      <ShieldAlert size={14} /> {att.malpracticeCount}
+                                    </span>
+                                  ) : (
+                                    <span className="text-emerald-600 text-xs">None</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                  {attempts.length === 0 && <p className="text-center text-slate-500 py-8 text-sm">No data available.</p>}
+                </div>
+              </div>
+            )}
 
-                  return (
-                    <div key={student} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                      <div className="flex justify-between items-center mb-6">
-                        <h4 className="text-lg font-serif font-bold text-ink">{student}</h4>
-                        <div className="flex gap-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                          <span>Avg: {Math.round(chartData.reduce((sum, d) => sum + d.score, 0) / chartData.length)}%</span>
-                          <span>Tests: {chartData.length}</span>
-                        </div>
-                      </div>
-                      <div className="h-[250px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={chartData}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                            <XAxis dataKey="test" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} />
-                            <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} domain={[0, 100]} />
-                            <Tooltip 
-                              contentStyle={{backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
-                              itemStyle={{color: '#4f46e5', fontWeight: 'bold'}}
-                            />
-                            <Line type="monotone" dataKey="score" stroke="#4f46e5" strokeWidth={3} dot={{r: 4, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
-                          </LineChart>
-                        </ResponsiveContainer>
+            {analyticsSubTab === 'subject' && (
+              <div className="bg-white rounded-xl border border-black/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] overflow-hidden">
+                <div className="p-6 border-b border-black/5 bg-paper/30">
+                  <h3 className="text-lg font-serif font-semibold text-ink">Subject Wise Analysis</h3>
+                </div>
+                <div className="p-6">
+                  {Object.entries(attempts.reduce((acc, att) => {
+                    const test = tests.find(t => t.id === att.testId);
+                    const subject = test?.subjectName || test?.subject || 'Unknown Subject';
+                    if (!acc[subject]) acc[subject] = [];
+                    acc[subject].push(att);
+                    return acc;
+                  }, {} as Record<string, TestAttempt[]>)).map(([subject, subjectAttempts]) => (
+                    <div key={subject} className="mb-4 border border-black/10 rounded-lg p-6 bg-paper/20 flex justify-between items-center">
+                      <h4 className="font-serif text-xl font-semibold text-ink">{subject}</h4>
+                      <div className="text-right">
+                        <p className="text-sm text-slate-500 uppercase tracking-wider font-medium mb-1">Total Attempts: {subjectAttempts.length}</p>
+                        <p className="text-lg font-mono text-ink">Pass Rate: {Math.round((subjectAttempts.filter(a => a.passed).length / subjectAttempts.length) * 100)}%</p>
                       </div>
                     </div>
-                  );
-                })}
+                  ))}
+                  {attempts.length === 0 && <p className="text-center text-slate-500 py-8 text-sm">No data available.</p>}
+                </div>
               </div>
             )}
 
             {analyticsSubTab === 'faculty' && (
-              <div className="space-y-8">
-                <h3 className="text-xl font-serif font-semibold text-ink flex items-center gap-2">
-                  <TrendingUp className="text-emerald-600" /> Faculty Performance Trends
-                </h3>
-                {Object.entries(attempts.reduce((acc, att) => {
-                  const test = tests.find(t => t.id === att.testId);
-                  const faculty = test?.facultyName || 'Unknown Faculty';
-                  if (!acc[faculty]) acc[faculty] = [];
-                  acc[faculty].push(att);
-                  return acc;
-                }, {} as Record<string, TestAttempt[]>)).map(([faculty, facultyAttempts]) => {
-                  // Group by test to get average per test for this faculty
-                  const testGroups = facultyAttempts.reduce((acc, att) => {
-                    if (!acc[att.testId]) acc[att.testId] = [];
-                    acc[att.testId].push(att);
+              <div className="bg-white rounded-xl border border-black/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] overflow-hidden">
+                <div className="p-6 border-b border-black/5 bg-paper/30">
+                  <h3 className="text-lg font-serif font-semibold text-ink">Faculty Wise Analysis</h3>
+                </div>
+                <div className="p-6">
+                  {Object.entries(attempts.reduce((acc, att) => {
+                    const test = tests.find(t => t.id === att.testId);
+                    const faculty = test?.facultyName || 'Unknown Faculty';
+                    if (!acc[faculty]) acc[faculty] = [];
+                    acc[faculty].push(att);
                     return acc;
-                  }, {} as Record<string, TestAttempt[]>);
-
-                  const chartData = Object.entries(testGroups).map(([testId, atts]) => ({
-                    test: tests.find(t => t.id === testId)?.title || 'Test',
-                    avgScore: Math.round(atts.reduce((sum, a) => sum + (a.score/a.totalMarks)*100, 0) / atts.length)
-                  }));
-
-                  return (
-                    <div key={faculty} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                      <div className="flex justify-between items-center mb-6">
-                        <h4 className="text-lg font-serif font-bold text-ink">{faculty}</h4>
-                        <div className="flex gap-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                          <span>Overall Avg: {Math.round(chartData.reduce((sum, d) => sum + d.avgScore, 0) / chartData.length)}%</span>
-                          <span>Tests: {chartData.length}</span>
-                        </div>
-                      </div>
-                      <div className="h-[250px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={chartData}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                            <XAxis dataKey="test" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} />
-                            <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} domain={[0, 100]} />
-                            <Tooltip 
-                              contentStyle={{backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
-                              itemStyle={{color: '#059669', fontWeight: 'bold'}}
-                            />
-                            <Line type="monotone" dataKey="avgScore" stroke="#059669" strokeWidth={3} dot={{r: 4, fill: '#059669', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
-                          </LineChart>
-                        </ResponsiveContainer>
+                  }, {} as Record<string, TestAttempt[]>)).map(([faculty, facultyAttempts]) => (
+                    <div key={faculty} className="mb-4 border border-black/10 rounded-lg p-6 bg-paper/20 flex justify-between items-center">
+                      <h4 className="font-serif text-xl font-semibold text-ink">{faculty}</h4>
+                      <div className="text-right">
+                        <p className="text-sm text-slate-500 uppercase tracking-wider font-medium mb-1">Student Attempts: {facultyAttempts.length}</p>
+                        <p className="text-lg font-mono text-ink">Avg Pass Rate: {Math.round((facultyAttempts.filter(a => a.passed).length / facultyAttempts.length) * 100)}%</p>
                       </div>
                     </div>
-                  );
-                })}
+                  ))}
+                  {attempts.length === 0 && <p className="text-center text-slate-500 py-8 text-sm">No data available.</p>}
+                </div>
               </div>
             )}
+
+            {analyticsSubTab === 'section' && (
+              <div className="bg-white rounded-xl border border-black/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] overflow-hidden">
+                <div className="p-6 border-b border-black/5 bg-paper/30">
+                  <h3 className="text-lg font-serif font-semibold text-ink">Section Wise Analysis</h3>
+                </div>
+                <div className="p-6">
+                  {Object.entries(attempts.reduce((acc, att) => {
+                    const studentReg = students.find(s => s.name === att.studentName || s.usn === att.usn);
+                    const section = att.section || studentReg?.section || 'Unknown Section';
+                    if (!acc[section]) acc[section] = [];
+                    acc[section].push(att);
+                    return acc;
+                  }, {} as Record<string, TestAttempt[]>)).map(([section, sectionAttempts]) => (
+                    <div key={section} className="mb-4 border border-black/10 rounded-lg p-6 bg-paper/20 flex justify-between items-center">
+                      <h4 className="font-serif text-xl font-semibold text-ink">Section: {section}</h4>
+                      <div className="text-right">
+                        <p className="text-sm text-slate-500 uppercase tracking-wider font-medium mb-1">Total Attempts: {sectionAttempts.length}</p>
+                        <p className="text-lg font-mono text-ink">Pass Rate: {Math.round((sectionAttempts.filter(a => a.passed).length / sectionAttempts.length) * 100)}%</p>
+                      </div>
+                    </div>
+                  ))}
+                  {attempts.length === 0 && <p className="text-center text-slate-500 py-8 text-sm">No data available.</p>}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'manage' && (
+          <div className="max-w-6xl mx-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-3xl font-serif text-ink">Manage Tests</h1>
+              <button onClick={() => setActiveTab('create')} className="bg-ink text-white px-4 py-2 rounded-md hover:bg-slate-800 transition-colors flex items-center gap-2">
+                <Plus size={18} /> Create Test
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {tests.map(test => (
+                <div key={test.id} className="bg-white p-6 rounded-xl border border-black/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+                  <div className="flex justify-between items-start mb-4">
+                    <h3 className="font-serif text-xl font-semibold text-ink">{test.title}</h3>
+                    <span className="bg-paper text-slate-600 text-xs px-2 py-1 rounded-md font-medium border border-black/5">{test.subject}</span>
+                  </div>
+                  <div className="space-y-2 text-sm text-slate-600 mb-6">
+                    <p><span className="font-medium text-slate-800">Test ID:</span> <span className="font-mono text-xs">{test.id}</span></p>
+                    {test.topic && <p><span className="font-medium text-slate-800">Topic:</span> {test.topic}</p>}
+                    {test.subjectCode && <p><span className="font-medium text-slate-800">Subject:</span> {test.subjectName} ({test.subjectCode})</p>}
+                    {test.facultyName && <p><span className="font-medium text-slate-800">Faculty:</span> {test.facultyName} {test.facultyId ? `(${test.facultyId})` : ''}</p>}
+                    {test.scheduledTime && <p><span className="font-medium text-slate-800">Scheduled:</span> {new Date(test.scheduledTime).toLocaleString()}</p>}
+                    <p><span className="font-medium text-slate-800">Duration:</span> {test.durationMinutes} mins</p>
+                    <p><span className="font-medium text-slate-800">Questions:</span> {test.questions.length}</p>
+                    <p><span className="font-medium text-slate-800">Pass Marks:</span> {test.passMarks}</p>
+                    {test.collaborators && test.collaborators.length > 0 && (
+                      <p><span className="font-medium text-slate-800">Collaborators:</span> {test.collaborators.length}</p>
+                    )}
+                  </div>
+                  
+                  {test.facultyId === user.data?.id && (
+                    <div className="pt-4 border-t border-black/5">
+                      {selectedTestForInvite === test.id ? (
+                        <div className="space-y-3">
+                          <select 
+                            value={inviteFacultyId}
+                            onChange={e => setInviteFacultyId(e.target.value)}
+                            className="w-full p-2 border border-black/10 rounded-md text-sm"
+                          >
+                            <option value="">Select Faculty to Invite</option>
+                            {faculties.filter(f => f.id !== user.data?.id && !test.collaborators?.includes(f.id)).map(f => (
+                              <option key={f.id} value={f.id}>{f.name} ({f.id})</option>
+                            ))}
+                          </select>
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => handleInviteCollaborator(test.id)}
+                              className="flex-1 bg-ink text-white py-2 rounded-md text-xs font-medium hover:bg-slate-800"
+                            >
+                              Send Invite
+                            </button>
+                            <button 
+                              onClick={() => setSelectedTestForInvite(null)}
+                              className="flex-1 bg-paper text-slate-600 py-2 rounded-md text-xs font-medium border border-black/10"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button 
+                          onClick={() => setSelectedTestForInvite(test.id)}
+                          className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-ink hover:bg-black/5 rounded-lg transition-colors border border-black/10"
+                        >
+                          <UserPlus size={16} /> Invite Collaborator
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {tests.length === 0 && (
+                <div className="col-span-full text-center p-12 bg-white rounded-xl border border-dashed border-slate-300 text-slate-500">
+                  No tests created yet. Click "Create Test" to begin.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'create' && (
+          <div className="max-w-4xl mx-auto">
+            <h1 className="text-3xl font-serif text-ink mb-6">Create New Test</h1>
+            
+            {errorMessage && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 flex justify-between items-center">
+                <span>{errorMessage}</span>
+                <button onClick={() => setErrorMessage('')} className="text-red-500 hover:text-red-700">
+                  <X size={18} />
+                </button>
+              </div>
+            )}
+
+            <div className="bg-white p-8 rounded-xl border border-black/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] mb-6">
+              <h2 className="text-xl font-serif font-semibold text-ink mb-6">Test Details</h2>
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-xs uppercase tracking-wider font-semibold text-slate-500 mb-2">Title</label>
+                  <input type="text" value={newTest.title} onChange={e => setNewTest({...newTest, title: e.target.value})} className="w-full p-3 border-b border-slate-300 focus:border-ink focus:outline-none bg-transparent transition-colors rounded-none" placeholder="e.g., Midterm Exam" />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wider font-semibold text-slate-500 mb-2">Language / Category</label>
+                  <select value={newTest.subject} onChange={e => setNewTest({...newTest, subject: e.target.value as Subject})} className="w-full p-3 border-b border-slate-300 focus:border-ink focus:outline-none bg-transparent transition-colors rounded-none">
+                    <option value="Java">Java</option>
+                    <option value="Python">Python</option>
+                    <option value="SQL">SQL</option>
+                    <option value="C">C</option>
+                    <option value="Ada">Ada</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wider font-semibold text-slate-500 mb-2">Topic</label>
+                  <input type="text" value={newTest.topic || ''} onChange={e => setNewTest({...newTest, topic: e.target.value})} className="w-full p-3 border-b border-slate-300 focus:border-ink focus:outline-none bg-transparent transition-colors rounded-none" placeholder="e.g., Arrays" />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wider font-semibold text-slate-500 mb-2">Subject Code</label>
+                  <input type="text" value={newTest.subjectCode || ''} onChange={e => setNewTest({...newTest, subjectCode: e.target.value})} className="w-full p-3 border-b border-slate-300 focus:border-ink focus:outline-none bg-transparent transition-colors rounded-none" placeholder="e.g., CS101" />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wider font-semibold text-slate-500 mb-2">Subject Name</label>
+                  <input type="text" value={newTest.subjectName || ''} onChange={e => setNewTest({...newTest, subjectName: e.target.value})} className="w-full p-3 border-b border-slate-300 focus:border-ink focus:outline-none bg-transparent transition-colors rounded-none" placeholder="e.g., Intro to CS" />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wider font-semibold text-slate-500 mb-2">Faculty ID</label>
+                  <input type="text" value={newTest.facultyId || ''} onChange={e => setNewTest({...newTest, facultyId: e.target.value})} className="w-full p-3 border-b border-slate-300 focus:border-ink focus:outline-none bg-transparent transition-colors rounded-none" placeholder="e.g., FAC001" />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wider font-semibold text-slate-500 mb-2">Faculty Name</label>
+                  <input type="text" value={newTest.facultyName || ''} onChange={e => setNewTest({...newTest, facultyName: e.target.value})} className="w-full p-3 border-b border-slate-300 focus:border-ink focus:outline-none bg-transparent transition-colors rounded-none" placeholder="e.g., John Doe" />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wider font-semibold text-slate-500 mb-2">Duration (minutes)</label>
+                  <input type="number" value={isNaN(newTest.durationMinutes!) ? '' : newTest.durationMinutes} onChange={e => setNewTest({...newTest, durationMinutes: parseInt(e.target.value)})} className="w-full p-3 border-b border-slate-300 focus:border-ink focus:outline-none bg-transparent transition-colors rounded-none" />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wider font-semibold text-slate-500 mb-2">Scheduled Time</label>
+                  <input type="datetime-local" value={newTest.scheduledTime || ''} onChange={e => setNewTest({...newTest, scheduledTime: e.target.value})} className="w-full p-3 border-b border-slate-300 focus:border-ink focus:outline-none bg-transparent transition-colors rounded-none" />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wider font-semibold text-slate-500 mb-2">Pass Marks</label>
+                  <input type="number" value={isNaN(newTest.passMarks!) ? '' : newTest.passMarks} onChange={e => setNewTest({...newTest, passMarks: parseInt(e.target.value)})} className="w-full p-3 border-b border-slate-300 focus:border-ink focus:outline-none bg-transparent transition-colors rounded-none" />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wider font-semibold text-slate-500 mb-2">Target Branch (Optional)</label>
+                  <select value={newTest.targetBranch || ''} onChange={e => setNewTest({...newTest, targetBranch: e.target.value})} className="w-full p-3 border-b border-slate-300 focus:border-ink focus:outline-none bg-transparent transition-colors rounded-none">
+                    <option value="">All Branches</option>
+                    {branches.map(b => (
+                      <option key={b.name} value={b.name}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wider font-semibold text-slate-500 mb-2">Target Section (Optional)</label>
+                  <input type="text" value={newTest.targetSection || ''} onChange={e => setNewTest({...newTest, targetSection: e.target.value})} className="w-full p-3 border-b border-slate-300 focus:border-ink focus:outline-none bg-transparent transition-colors rounded-none" placeholder="e.g., A" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-8 rounded-xl border border-black/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] mb-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-serif font-semibold text-ink">Questions ({newTest.questions?.length || 0})</h2>
+              </div>
+              
+              <div className="bg-paper/30 p-6 rounded-lg border border-black/5 mb-8">
+                <h3 className="font-serif font-medium text-ink flex items-center gap-2 mb-4"><Sparkles size={18} className="text-olive" /> Generate with AI</h3>
+                <div className="flex gap-3">
+                  <input 
+                    type="text" 
+                    value={aiTopic} 
+                    onChange={e => setAiTopic(e.target.value)} 
+                    placeholder={`Enter topic for ${newTest.subject} (e.g., "Inheritance and Polymorphism")`}
+                    className="flex-1 p-3 border-b border-slate-300 focus:border-ink focus:outline-none bg-white transition-colors rounded-none"
+                  />
+                  <button 
+                    onClick={() => handleGenerateAI('mcq')} 
+                    disabled={isGenerating || !aiTopic}
+                    className="bg-ink text-white px-6 py-3 rounded-md hover:bg-slate-800 disabled:opacity-50 flex items-center gap-2 transition-colors"
+                    title="Generate 3 MCQs"
+                  >
+                    {isGenerating ? 'Generating...' : 'MCQs'}
+                  </button>
+                  <button 
+                    onClick={() => handleGenerateAI('coding')} 
+                    disabled={isGenerating || !aiTopic}
+                    className="bg-olive text-white px-6 py-3 rounded-md hover:bg-[#4a4a35] disabled:opacity-50 flex items-center gap-2 transition-colors"
+                    title="Generate 1 Coding Question"
+                  >
+                    <Code2 size={18} />
+                    {isGenerating ? 'Generating...' : 'Coding'}
+                  </button>
+                </div>
+
+                {generatedQs.length > 0 && (
+                  <div className="mt-6 space-y-4">
+                    <h4 className="font-medium text-slate-700 mb-3">Select Questions to Add:</h4>
+                    {generatedQs.map((q, idx) => (
+                      <div key={idx} className="bg-white p-5 rounded-lg border border-black/5 flex gap-4 shadow-sm">
+                        <input 
+                          type="checkbox" 
+                          checked={q.selected} 
+                          onChange={e => {
+                            const newQs = [...generatedQs];
+                            newQs[idx].selected = e.target.checked;
+                            setGeneratedQs(newQs);
+                          }}
+                          className="mt-1 w-4 h-4 text-ink accent-ink"
+                        />
+                        <div className="flex-1">
+                          <div className="flex justify-between items-start mb-3">
+                            <p className="font-medium text-ink">{q.text}</p>
+                            <span className="text-xs font-medium bg-paper text-slate-600 px-2 py-1 rounded-md uppercase border border-black/5">{q.type || 'mcq'}</span>
+                          </div>
+                          {q.type === 'coding' ? (
+                            <div className="mb-3">
+                              <p className="text-xs font-medium text-slate-500 mb-2 uppercase tracking-wider">Initial Code:</p>
+                              <pre className="text-xs bg-slate-50 p-3 rounded-md border border-slate-200 font-mono overflow-x-auto text-slate-700">{q.initialCode}</pre>
+                            </div>
+                          ) : (
+                            <ul className="text-sm text-slate-600 space-y-2 mb-3">
+                              {q.options?.map((opt, i) => (
+                                <li key={i} className={i === q.correctAnswer ? 'text-olive font-medium flex items-center gap-2' : 'flex items-center gap-2'}>
+                                  <span className="w-6 h-6 rounded-full bg-paper flex items-center justify-center text-xs border border-black/5">{String.fromCharCode(65+i)}</span> {opt}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          <p className="text-xs text-slate-500 bg-paper/50 p-3 rounded-md border border-black/5"><span className="font-semibold text-slate-700">Explanation:</span> {q.explanation}</p>
+                        </div>
+                      </div>
+                    ))}
+                    <button onClick={handleAddSelectedAI} className="w-full bg-paper text-ink border border-black/10 py-3 rounded-md font-medium hover:bg-slate-100 transition-colors mt-4">
+                      Add Selected Questions
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-serif font-medium text-ink text-lg">Or Add Manually</h3>
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => setNewTest(prev => ({ ...prev, questions: [...(prev.questions || []), { id: Date.now().toString(), type: 'mcq', text: 'New MCQ Question', options: ['Option A', 'Option B', 'Option C', 'Option D'], correctAnswer: 0, marks: 10 }] }))}
+                    className="bg-white border border-black/10 text-ink px-4 py-2 rounded-md text-sm hover:bg-paper transition-colors flex items-center gap-2 shadow-sm"
+                  >
+                    <Plus size={16} /> Add MCQ
+                  </button>
+                  <button 
+                    onClick={() => setNewTest(prev => ({ ...prev, questions: [...(prev.questions || []), { id: Date.now().toString(), type: 'coding', text: 'Write a program to...', initialCode: '// Type your code here\n', marks: 10 }] }))}
+                    className="bg-white border border-black/10 text-ink px-4 py-2 rounded-md text-sm hover:bg-paper transition-colors flex items-center gap-2 shadow-sm"
+                  >
+                    <Plus size={16} /> Add Coding Question
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {newTest.questions?.map((q, idx) => (
+                  <div key={idx} className="p-6 border border-black/10 rounded-xl bg-white shadow-sm">
+                    <div className="flex justify-between mb-4">
+                      <span className="font-serif font-semibold text-ink text-lg">Q{idx + 1}. <span className="text-xs font-medium bg-paper border border-black/5 px-2 py-1 rounded-md ml-2 uppercase tracking-wider">{q.type || 'mcq'}</span></span>
+                      <button 
+                        onClick={() => {
+                          const newQs = [...(newTest.questions || [])];
+                          newQs.splice(idx, 1);
+                          setNewTest(prev => ({ ...prev, questions: newQs }));
+                        }}
+                        className="text-red-500 hover:text-red-700 text-sm font-medium transition-colors"
+                      >
+                        Remove
+                      </button>
+                    </div>
+
+                    <div className="mb-4">
+                      <label className="block text-xs uppercase tracking-wider font-semibold text-slate-500 mb-2">Marks</label>
+                      <input 
+                        type="number" 
+                        value={isNaN(q.marks) ? '' : q.marks}
+                        onChange={e => {
+                          const newQs = [...(newTest.questions || [])];
+                          newQs[idx].marks = parseInt(e.target.value);
+                          setNewTest(prev => ({ ...prev, questions: newQs }));
+                        }}
+                        className="w-24 p-2 border-b border-slate-300 focus:border-ink focus:outline-none bg-transparent transition-colors rounded-none text-sm"
+                      />
+                    </div>
+                    
+                    <textarea 
+                      value={q.text}
+                      onChange={e => {
+                        const newQs = [...(newTest.questions || [])];
+                        newQs[idx].text = e.target.value;
+                        setNewTest(prev => ({ ...prev, questions: newQs }));
+                      }}
+                      className="w-full p-3 border-b border-slate-300 focus:border-ink focus:outline-none bg-transparent transition-colors rounded-none mb-4 resize-y"
+                      rows={2}
+                    />
+
+                    {q.type === 'coding' ? (
+                      <div>
+                        <label className="block text-xs uppercase tracking-wider font-semibold text-slate-500 mb-2">Initial Code Template</label>
+                        <textarea 
+                          value={q.initialCode || ''}
+                          onChange={e => {
+                            const newQs = [...(newTest.questions || [])];
+                            newQs[idx].initialCode = e.target.value;
+                            setNewTest(prev => ({ ...prev, questions: newQs }));
+                          }}
+                          className="w-full p-4 border border-slate-300 rounded-lg font-mono text-sm bg-slate-50 focus:border-ink focus:outline-none transition-colors"
+                          rows={4}
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {q.options?.map((opt, oIdx) => (
+                          <div key={oIdx} className="flex items-center gap-3">
+                            <input 
+                              type="radio" 
+                              name={`correct-${q.id}`} 
+                              checked={q.correctAnswer === oIdx}
+                              onChange={() => {
+                                const newQs = [...(newTest.questions || [])];
+                                newQs[idx].correctAnswer = oIdx;
+                                setNewTest(prev => ({ ...prev, questions: newQs }));
+                              }}
+                              className="text-ink accent-ink w-4 h-4"
+                            />
+                            <input 
+                              type="text" 
+                              value={opt}
+                              onChange={e => {
+                                const newQs = [...(newTest.questions || [])];
+                                newQs[idx].options![oIdx] = e.target.value;
+                                setNewTest(prev => ({ ...prev, questions: newQs }));
+                              }}
+                              className="flex-1 p-2 border-b border-slate-300 focus:border-ink focus:outline-none bg-transparent transition-colors rounded-none text-sm"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {(!newTest.questions || newTest.questions.length === 0) && (
+                  <div className="text-center p-12 bg-white rounded-xl border border-dashed border-slate-300 text-slate-500">
+                    No questions added yet.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <button onClick={handleSaveTest} className="bg-ink text-white px-8 py-3 rounded-md font-medium hover:bg-slate-800 transition-colors shadow-sm">
+                Save Test
+              </button>
+            </div>
           </div>
         )}
 
