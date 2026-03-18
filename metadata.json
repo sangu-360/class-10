@@ -1,5 +1,5 @@
 {
-  "name": "CodeInsight AI",
-  "description": "An intelligent coding assistant for Python, SQL, Excel, and PowerBI DAX. Features split-screen structured answers, code visualization, and simulated execution against a demo database.",
+  "name": "Atria CodeInsight",
+  "description": "Atria Institute of Technology's intelligent coding assessment and learning platform. Features AI-powered grading, secure exam mode with malpractice detection, and collaborative test creation for faculty.",
   "requestFramePermissions": []
 }

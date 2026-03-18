@@ -3,31 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CodeInsight AI</title>
+    <title>Atria CodeInsight</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
-        darkMode: 'class',
         theme: {
           extend: {
             fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-              mono: ['JetBrains Mono', 'monospace'],
+              sans: ['Arial', 'Helvetica', 'sans-serif'],
+              serif: ['Georgia', '"Times New Roman"', 'serif'],
+              mono: ['"Courier New"', 'Courier', 'monospace'],
             },
             colors: {
-              app: 'var(--bg-app)',
-              sidebar: 'var(--bg-sidebar)',
-              'sidebar-header': 'var(--bg-sidebar-header)',
-              right: 'var(--bg-right)',
-              editor: 'var(--bg-editor)',
-              'editor-sidebar': 'var(--bg-editor-sidebar)',
-              'ide-fg': 'var(--fg-editor)',
-              border: 'var(--border-color)',
-              primary: 'var(--text-primary)',
-              secondary: 'var(--text-secondary)',
-              tertiary: 'var(--text-tertiary)',
-              input: 'var(--bg-input)',
+              paper: '#f5f2ed',
+              ink: '#1a1a1a',
+              olive: '#5A5A40',
+              sand: '#e8e4db',
             }
           },
         },
@@ -36,77 +28,34 @@
     <style>
       /* Custom scrollbar for a sleek IDE look */
       ::-webkit-scrollbar {
-        width: 10px;
-        height: 10px;
+        width: 8px;
+        height: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: var(--bg-app); 
+        background: #f5f2ed; 
       }
       ::-webkit-scrollbar-thumb {
-        background: var(--border-color); 
-        border-radius: 5px;
+        background: #d1cbc1; 
+        border-radius: 4px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: var(--text-tertiary); 
+        background: #a8a296; 
       }
       
-      :root {
-        /* Dark Mode (Default) */
-        --bg-app: #0f172a; /* Slate 900 */
-        --bg-sidebar: #111827; /* Gray 900 */
-        --bg-sidebar-header: rgba(17, 24, 39, 0.9);
-        --bg-right: #0f111a;
-        --bg-editor: #1e1e1e;
-        --bg-editor-sidebar: #252526;
-        --bg-input: #111827;
-        
-        --fg-editor: #d4d4d4;
-        --border-color: #1f2937; /* Gray 800 */
-        
-        --text-primary: #ffffff;
-        --text-secondary: #e2e8f0; /* Slate 200 */
-        --text-tertiary: #9ca3af; /* Gray 400 */
-
-        /* Syntax Highlighting - Dark */
-        --syntax-keyword: #c586c0;
-        --syntax-string: #ce9178;
-        --syntax-number: #b5cea8;
-        --syntax-comment: #6a9955;
-      }
-
-      .light-mode {
-        /* Light Mode */
-        --bg-app: #f1f5f9; /* Slate 100 */
-        --bg-sidebar: #ffffff;
-        --bg-sidebar-header: rgba(255, 255, 255, 0.9);
-        --bg-right: #f8fafc; /* Slate 50 */
-        --bg-editor: #ffffff;
-        --bg-editor-sidebar: #f3f4f6; /* Gray 100 */
-        --bg-input: #f9fafb; /* Gray 50 */
-
-        --fg-editor: #374151; /* Gray 700 */
-        --border-color: #e2e8f0; /* Slate 200 */
-
-        --text-primary: #111827; /* Gray 900 */
-        --text-secondary: #334155; /* Slate 700 */
-        --text-tertiary: #64748b; /* Slate 500 */
-
-        /* Syntax Highlighting - Light */
-        --syntax-keyword: #a626a4;
-        --syntax-string: #e45649;
-        --syntax-number: #40a153;
-        --syntax-comment: #a0a1a7;
-      }
-
       body {
-        background-color: var(--bg-app);
-        color: var(--text-primary);
+        background-color: #f5f2ed;
+        color: #1a1a1a;
+        font-family: 'Inter', sans-serif;
+      }
+      
+      input, textarea, select {
+        color: #1a1a1a;
+        background-color: #ffffff;
       }
     </style>
   <script type="importmap">
 {
   "imports": {
-    "@google/genai": "https://esm.sh/@google/genai@^1.39.0",
     "react/": "https://esm.sh/react@^19.2.4/",
     "react": "https://esm.sh/react@^19.2.4",
     "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
@@ -118,5 +67,6 @@
 </head>
   <body>
     <div id="root"></div>
-  </body>
+  <script type="module" src="/index.tsx"></script>
+</body>
 </html>
