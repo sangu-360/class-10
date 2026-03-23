@@ -10,7 +10,6 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@google/genai": "^1.45.0",
     "@supabase/supabase-js": "^2.99.2",
     "lucide-react": "^0.563.0",
     "openai": "^6.29.0",

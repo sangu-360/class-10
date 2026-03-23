@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Test, TestAttempt, QuestionStatus, StudentReg } from '../types';
 import QuestionPalette from './QuestionPalette';
 import { Clock, Play, AlertCircle, Loader2, Maximize, ShieldAlert } from 'lucide-react';
-import { evaluateCode } from '../services/groqService';
-import { gradeCodingAnswer } from '../services/geminiService';
+import { evaluateCode, gradeCodingAnswer } from '../services/groqService';
 import { supabaseService } from '../services/supabaseService';
 
 interface Props {

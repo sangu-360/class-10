@@ -93,6 +93,55 @@ export async function evaluateCode(code: string, language: string) {
   }
 }
 
+export async function gradeCodingAnswer(questionText: string, studentCode: string, totalMarks: number): Promise<{ score: number, feedback: string }> {
+  if (!studentCode || studentCode.trim() === '') {
+    return { score: 0, feedback: "No code provided." };
+  }
+
+  const prompt = `You are an expert programming instructor grading a student's code.
+  Question:
+  ${questionText}
+
+  Student's Code:
+  ${studentCode}
+
+  Total Marks Available: ${totalMarks}
+
+  Evaluate the code based on logic, effort, and correctness. 
+  - If the student hardcoded the output (e.g., just printing the expected output without logic), give 0 marks.
+  - If the student attempted the logic but has minor syntax errors or edge-case failures, give partial marks (e.g., 50% to 80% of total marks).
+  - If the code is completely correct and optimal, give full marks.
+  - The score must be an integer between 0 and ${totalMarks}.
+
+  Return the response as a JSON object with:
+  - "score": the integer score awarded
+  - "feedback": brief feedback explaining the score
+  Do not include any markdown formatting like \`\`\`json, just return the raw JSON object.`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        { role: 'system', content: 'You are a helpful educational assistant that outputs raw, valid JSON objects.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.2
+    });
+
+    const text = response.choices[0]?.message?.content || '{"score": 0, "feedback": "Failed to parse evaluation."}';
+    const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const result = JSON.parse(cleanText);
+    
+    return {
+      score: Math.min(Math.max(Number(result.score) || 0, 0), totalMarks),
+      feedback: result.feedback || "No feedback provided."
+    };
+  } catch (error) {
+    console.error("Error grading code with Groq:", error);
+    return { score: 0, feedback: "Error occurred during AI evaluation." };
+  }
+}
+
 export async function generateCodingQuestions(subject: string, topic: string, count: number = 1) {
   const prompt = `Generate ${count} coding questions for a test on ${subject}, specifically focusing on the topic: ${topic}. 
   Return the response as a JSON array of objects. Each object must have:
