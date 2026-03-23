@@ -81,7 +81,16 @@ export default function App() {
   }
 
   if (user.role === 'teacher') {
-    return <TeacherDashboard user={user} tests={tests} attempts={attempts} onAddTest={handleAddTest} onLogout={handleLogout} />;
+    return (
+      <TeacherDashboard 
+        user={user} 
+        tests={tests} 
+        attempts={attempts} 
+        onAddTest={handleAddTest} 
+        onTestsUpdate={setTests}
+        onLogout={handleLogout} 
+      />
+    );
   }
 
   if (activeTest) {

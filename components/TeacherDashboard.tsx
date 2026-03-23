@@ -1,10 +1,35 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Test, TestAttempt, Subject, Question, Faculty, SubjectReg, StudentReg, BranchReg, Role } from '../types';
+import { 
+  Test, 
+  TestAttempt, 
+  Subject, 
+  Question, 
+  Faculty, 
+  SubjectReg, 
+  StudentReg, 
+  BranchReg, 
+  Role, 
+  LiveSession, 
+  TestStatus 
+} from '../types';
 import { 
   Plus, Users, BarChart3, Settings, Sparkles, X, Code2, UserPlus, 
   BookOpen, GraduationCap, Lock, Unlock, Building2, FileSpreadsheet, 
-  Upload, Download, ShieldAlert 
+  Upload, Download, ShieldAlert, Play, Edit3, Save, TrendingUp, Activity, Trash2, ChevronRight, Eye, CheckCircle
 } from 'lucide-react';
+import { 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  Legend, 
+  BarChart, 
+  Bar, 
+  Cell 
+} from 'recharts';
 import Papa from 'papaparse';
 import { generateQuestions, generateCodingQuestions } from '../services/groqService';
 import TestReview from './TestReview';
@@ -17,13 +42,223 @@ interface Props {
   tests: Test[];
   attempts: TestAttempt[];
   onAddTest: (test: Test) => void;
+  onTestsUpdate: (tests: Test[]) => void;
   onLogout: () => void;
 }
 
-export default function TeacherDashboard({ user, tests, attempts, onAddTest, onLogout }: Props) {
-  const [activeTab, setActiveTab] = useState<'manage' | 'analytics' | 'create' | 'faculty-reg' | 'subject-reg' | 'student-reg' | 'branch-reg'>('analytics');
+export default function TeacherDashboard({ user, tests, attempts, onAddTest, onTestsUpdate, onLogout }: Props) {
+  const [activeTab, setActiveTab] = useState<'manage' | 'analytics' | 'create' | 'faculty-reg' | 'subject-reg' | 'student-reg' | 'branch-reg' | 'live-status'>('analytics');
   const [analyticsSubTab, setAnalyticsSubTab] = useState<'overview' | 'test' | 'student' | 'subject' | 'faculty' | 'section'>('overview');
   const [reviewAttempt, setReviewAttempt] = useState<{test: Test, attempt: TestAttempt} | null>(null);
+  const [selectedLiveTest, setSelectedLiveTest] = useState<Test | null>(null);
+  const [liveSessions, setLiveSessions] = useState<LiveSession[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingTest, setEditingTest] = useState<Test | null>(null);
+
+  const handleEndTest = async (testId: string) => {
+    if (!window.confirm('Are you sure you want to end this test for all students?')) return;
+    try {
+      await supabaseService.updateTestStatus(testId, 'completed');
+      const updatedTests = tests.map(t => t.id === testId ? { ...t, status: 'completed' as TestStatus } : t);
+      onTestsUpdate(updatedTests);
+      if (selectedLiveTest?.id === testId) {
+        setSelectedLiveTest({ ...selectedLiveTest, status: 'completed' });
+      }
+      alert('Test ended successfully.');
+    } catch (error) {
+      console.error('Error ending test:', error);
+      alert('Failed to end test.');
+    }
+  };
+
+  const handleDeleteTest = async (testId: string) => {
+    if (!window.confirm('Are you sure you want to delete this test? This action cannot be undone.')) return;
+    try {
+      await supabaseService.deleteTest(testId);
+      const updatedTests = tests.filter(t => t.id !== testId);
+      onTestsUpdate(updatedTests);
+      alert('Test deleted successfully.');
+    } catch (error) {
+      console.error('Error deleting test:', error);
+      alert('Failed to delete test.');
+    }
+  };
+
+  const handleStartTest = async (testId: string) => {
+    try {
+      await supabaseService.updateTestStatus(testId, 'live');
+      const updatedTests = tests.map(t => t.id === testId ? { ...t, status: 'live' as TestStatus } : t);
+      onTestsUpdate(updatedTests);
+      if (selectedLiveTest?.id === testId) {
+        setSelectedLiveTest({ ...selectedLiveTest, status: 'live' });
+      }
+    } catch (error) {
+      console.error('Error starting test:', error);
+    }
+  };
+
+  const handleEditTest = (test: Test) => {
+    setEditingTest({ ...test });
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingTest) return;
+    try {
+      await supabaseService.updateTest(editingTest);
+      const updatedTests = tests.map(t => t.id === editingTest.id ? editingTest : t);
+      onTestsUpdate(updatedTests);
+      setIsEditing(false);
+      setEditingTest(null);
+    } catch (error) {
+      console.error('Error saving test:', error);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditingTest(null);
+  };
+
+  const renderEditModal = () => {
+    if (!editingTest) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+          <div className="p-6 border-b border-black/5 flex justify-between items-center bg-slate-50">
+            <h3 className="text-2xl font-serif text-ink">Edit Assessment: {editingTest.title}</h3>
+            <button onClick={handleCancelEdit} className="p-2 hover:bg-black/5 rounded-full transition-colors">
+              <X size={24} />
+            </button>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-8 space-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-xs uppercase tracking-widest font-bold text-slate-400">Test Title</label>
+                <input 
+                  type="text" 
+                  value={editingTest.title}
+                  onChange={(e) => setEditingTest({ ...editingTest, title: e.target.value })}
+                  className="w-full p-4 bg-slate-50 border border-black/5 rounded-xl focus:outline-none focus:ring-2 focus:ring-ink/5"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs uppercase tracking-widest font-bold text-slate-400">Duration (Minutes)</label>
+                <input 
+                  type="number" 
+                  value={editingTest.durationMinutes}
+                  onChange={(e) => setEditingTest({ ...editingTest, durationMinutes: parseInt(e.target.value) || 0 })}
+                  className="w-full p-4 bg-slate-50 border border-black/5 rounded-xl focus:outline-none focus:ring-2 focus:ring-ink/5"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs uppercase tracking-widest font-bold text-slate-400">Scheduled Time</label>
+                <input 
+                  type="datetime-local" 
+                  value={editingTest.scheduledTime ? new Date(editingTest.scheduledTime).toISOString().slice(0, 16) : ''}
+                  onChange={(e) => setEditingTest({ ...editingTest, scheduledTime: e.target.value })}
+                  className="w-full p-4 bg-slate-50 border border-black/5 rounded-xl focus:outline-none focus:ring-2 focus:ring-ink/5"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs uppercase tracking-widest font-bold text-slate-400">Manual Start</label>
+                <div className="flex items-center gap-3 p-4 bg-slate-50 border border-black/5 rounded-xl">
+                  <input 
+                    type="checkbox" 
+                    checked={editingTest.isManualStart}
+                    onChange={(e) => setEditingTest({ ...editingTest, isManualStart: e.target.checked })}
+                    className="w-5 h-5 rounded border-black/10 text-ink focus:ring-ink"
+                  />
+                  <span className="text-sm font-medium">Enable Manual Start</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h4 className="text-lg font-serif">Questions ({editingTest.questions.length})</h4>
+              </div>
+              
+              <div className="space-y-6">
+                {editingTest.questions.map((q, idx) => (
+                  <div key={idx} className="p-6 bg-slate-50 rounded-2xl border border-black/5 space-y-4">
+                    <div className="flex justify-between gap-4">
+                      <span className="bg-ink text-white w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0">{idx + 1}</span>
+                      <textarea 
+                        value={q.text}
+                        onChange={(e) => {
+                          const newQs = [...editingTest.questions];
+                          newQs[idx] = { ...newQs[idx], text: e.target.value };
+                          setEditingTest({ ...editingTest, questions: newQs });
+                        }}
+                        className="flex-1 p-3 bg-white border border-black/5 rounded-xl focus:outline-none min-h-[80px]"
+                      />
+                      <button 
+                        onClick={() => {
+                          const newQs = editingTest.questions.filter((_, i) => i !== idx);
+                          setEditingTest({ ...editingTest, questions: newQs });
+                        }}
+                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <Trash2 size={20} />
+                      </button>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ml-12">
+                      {q.options.map((opt, optIdx) => (
+                        <div key={optIdx} className="flex items-center gap-3">
+                          <input 
+                            type="radio" 
+                            name={`correct-${idx}`}
+                            checked={q.correctAnswer === optIdx}
+                            onChange={() => {
+                              const newQs = [...editingTest.questions];
+                              newQs[idx] = { ...newQs[idx], correctAnswer: optIdx };
+                              setEditingTest({ ...editingTest, questions: newQs });
+                            }}
+                            className="w-4 h-4 text-ink focus:ring-ink"
+                          />
+                          <input 
+                            type="text" 
+                            value={opt}
+                            onChange={(e) => {
+                              const newQs = [...editingTest.questions];
+                              const newOpts = [...newQs[idx].options];
+                              newOpts[optIdx] = e.target.value;
+                              newQs[idx] = { ...newQs[idx], options: newOpts };
+                              setEditingTest({ ...editingTest, questions: newQs });
+                            }}
+                            className="flex-1 p-2 bg-white border border-black/5 rounded-lg text-sm"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          <div className="p-6 border-t border-black/5 bg-slate-50 flex justify-end gap-4">
+            <button 
+              onClick={handleCancelEdit}
+              className="px-6 py-3 border border-black/10 rounded-xl text-sm font-semibold hover:bg-white transition-colors"
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={handleSaveEdit}
+              className="px-8 py-3 bg-ink text-white rounded-xl text-sm font-semibold hover:bg-slate-800 transition-colors flex items-center gap-2"
+            >
+              <Save size={18} /> Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const [newTest, setNewTest] = useState<Partial<Test>>({
     title: '', subject: 'Java', durationMinutes: 60, passMarks: 40, questions: [],
@@ -76,6 +311,47 @@ export default function TeacherDashboard({ user, tests, attempts, onAddTest, onL
     };
     fetchData();
   }, [user.data?.id]);
+
+  useEffect(() => {
+    let subscription: any;
+    if (activeTab === 'live-status' && selectedLiveTest) {
+      const fetchLive = async () => {
+        const sessions = await supabaseService.getLiveSessions(selectedLiveTest.id);
+        setLiveSessions(sessions);
+      };
+      fetchLive();
+
+      // Realtime subscription
+      subscription = supabaseService.subscribeToLiveSessions(selectedLiveTest.id, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const newSession: LiveSession = {
+            id: payload.new.id,
+            testId: payload.new.test_id,
+            studentId: payload.new.student_id,
+            studentName: payload.new.student_name,
+            currentQuestionIndex: payload.new.current_question_index,
+            answeredCount: payload.new.answered_count || 0,
+            lastActiveAt: payload.new.last_active_at
+          };
+          setLiveSessions(prev => [...prev, newSession]);
+        } else if (payload.eventType === 'UPDATE') {
+          setLiveSessions(prev => prev.map(s => s.studentId === payload.new.student_id ? {
+            ...s,
+            currentQuestionIndex: payload.new.current_question_index,
+            answeredCount: payload.new.answered_count || 0,
+            lastActiveAt: payload.new.last_active_at
+          } : s));
+        } else if (payload.eventType === 'DELETE') {
+          setLiveSessions(prev => prev.filter(s => s.id !== payload.old.id));
+        }
+      });
+    }
+    return () => {
+      if (subscription) subscription.unsubscribe();
+    };
+  }, [activeTab, selectedLiveTest]);
+
+  const myTests = tests.filter(t => t.facultyId === user.data?.id || t.collaborators?.includes(user.data?.id));
 
   const [newFaculty, setNewFaculty] = useState<Partial<Faculty>>({ id: '', name: '', email: '', dept: '', password: 'Atria@2026' });
   const [newSubject, setNewSubject] = useState<Partial<SubjectReg>>({ name: '', code: '', scheme: '2022', semester: '', academicYear: '' });
@@ -169,6 +445,7 @@ export default function TeacherDashboard({ user, tests, attempts, onAddTest, onL
       scheduledTime: finalScheduledTime || null,
       durationMinutes: Number(newTest.durationMinutes) || 60,
       passMarks: Number(newTest.passMarks) || 40,
+      isReviewEnabled: false,
       questions: newTest.questions?.map(q => ({
         ...q,
         marks: Number(q.marks) || 10
@@ -289,12 +566,56 @@ export default function TeacherDashboard({ user, tests, attempts, onAddTest, onL
     }
   };
 
+  // Performance Trends Data
+  const getPerformanceTrends = () => {
+    const sortedTests = [...tests]
+      .filter(t => attempts.some(a => a.testId === t.id))
+      .sort((a, b) => new Date(a.scheduledTime || 0).getTime() - new Date(b.scheduledTime || 0).getTime());
+    
+    return sortedTests.map(test => {
+      const testAttempts = attempts.filter(a => a.testId === test.id);
+      const avgScore = testAttempts.length > 0 
+        ? (testAttempts.reduce((acc, a) => acc + a.score, 0) / testAttempts.length).toFixed(1)
+        : 0;
+      
+      return {
+        name: test.title,
+        avgScore: parseFloat(avgScore as string),
+        count: testAttempts.length
+      };
+    });
+  };
+
+  // Class Performance Data
+  const getClassPerformance = () => {
+    const sections = [...new Set(students.map(s => s.section))].filter(Boolean);
+    return sections.map(section => {
+      const sectionStudents = students.filter(s => s.section === section);
+      const sectionAttempts = attempts.filter(a => 
+        sectionStudents.some(s => s.usn === a.usn)
+      );
+      
+      const avgScore = sectionAttempts.length > 0
+        ? (sectionAttempts.reduce((acc, a) => acc + (a.score / a.totalMarks * 100), 0) / sectionAttempts.length).toFixed(1)
+        : 0;
+        
+      return {
+        name: section,
+        performance: parseFloat(avgScore as string)
+      };
+    });
+  };
+
+  const performanceData = getPerformanceTrends();
+  const classData = getClassPerformance();
+
   if (reviewAttempt) {
     return <TestReview test={reviewAttempt.test} attempt={reviewAttempt.attempt} onBack={() => setReviewAttempt(null)} onlyWrong={true} />;
   }
 
   return (
     <div className="min-h-screen bg-paper flex font-sans">
+      {renderEditModal()}
       <div className="w-64 bg-paper border-r border-black/10 flex flex-col">
         <div className="p-6 border-b border-black/10">
           <div className="flex items-center text-ink select-none">
@@ -313,14 +634,6 @@ export default function TeacherDashboard({ user, tests, attempts, onAddTest, onL
             <Plus size={18} /> Create New Test
           </button>
           
-          {!isAdmin && (
-            <div className="pt-4 mt-4 border-t border-black/5">
-              <button onClick={() => setShowPinDialog(true)} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors text-slate-600 hover:bg-black/5">
-                <Lock size={18} /> Admin Access
-              </button>
-            </div>
-          )}
-
           {isAdmin && (
             <>
               <div className="pt-6 pb-2">
@@ -362,7 +675,89 @@ export default function TeacherDashboard({ user, tests, attempts, onAddTest, onL
       <div className="flex-1 p-8 overflow-y-auto bg-paper">
         {activeTab === 'analytics' && (
           <div className="max-w-6xl mx-auto">
-            <h1 className="text-3xl font-serif text-ink mb-6">Analytics Dashboard</h1>
+            <div className="flex justify-between items-end mb-8">
+              <div>
+                <h1 className="text-3xl font-serif text-ink mb-2">Analytics Dashboard</h1>
+                <p className="text-slate-500 text-sm">Comprehensive performance insights and trends.</p>
+              </div>
+              <button className="flex items-center gap-2 px-4 py-2 bg-white border border-black/10 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-slate-50 transition-colors">
+                <Download size={16} /> Export Report
+              </button>
+            </div>
+
+            {/* Performance Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+              <div className="bg-white p-6 rounded-2xl border border-black/5 shadow-sm">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-serif">Assessment Performance Trends</h3>
+                  <TrendingUp size={18} className="text-emerald-500" />
+                </div>
+                <div className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={performanceData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis 
+                        dataKey="name" 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fontSize: 10, fill: '#64748b' }}
+                      />
+                      <YAxis 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fontSize: 10, fill: '#64748b' }}
+                      />
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                      />
+                      <Legend />
+                      <Line 
+                        type="monotone" 
+                        dataKey="avgScore" 
+                        name="Avg Score"
+                        stroke="#0f172a" 
+                        strokeWidth={3} 
+                        dot={{ r: 4, fill: '#0f172a', strokeWidth: 2, stroke: '#fff' }}
+                        activeDot={{ r: 6, strokeWidth: 0 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-2xl border border-black/5 shadow-sm">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-serif">Section-wise Performance (%)</h3>
+                  <Users size={18} className="text-indigo-500" />
+                </div>
+                <div className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={classData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis 
+                        dataKey="name" 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fontSize: 10, fill: '#64748b' }}
+                      />
+                      <YAxis 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fontSize: 10, fill: '#64748b' }}
+                      />
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                      />
+                      <Bar dataKey="performance" name="Performance %" radius={[6, 6, 0, 0]}>
+                        {classData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#0f172a' : '#64748b'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
             
             <div className="flex gap-2 mb-6 border-b border-black/10 pb-2 overflow-x-auto">
               {['overview', 'test', 'student', 'subject', 'faculty', 'section'].map(tab => (
@@ -485,7 +880,7 @@ export default function TeacherDashboard({ user, tests, attempts, onAddTest, onL
                   <h3 className="text-lg font-serif font-semibold text-ink">Test Wise Analysis</h3>
                 </div>
                 <div className="p-6">
-                  {tests.map(test => {
+                  {myTests.map(test => {
                     const testAttempts = attempts.filter(a => a.testId === test.id);
                     const passRate = testAttempts.length ? Math.round((testAttempts.filter(a => a.passed).length / testAttempts.length) * 100) : 0;
                     return (
@@ -709,7 +1104,7 @@ export default function TeacherDashboard({ user, tests, attempts, onAddTest, onL
               </button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {tests.map(test => (
+              {myTests.map(test => (
                 <div key={test.id} className="bg-white p-6 rounded-xl border border-black/5 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
                   <div className="flex justify-between items-start mb-4">
                     <h3 className="font-serif text-xl font-semibold text-ink">{test.title}</h3>
@@ -729,48 +1124,104 @@ export default function TeacherDashboard({ user, tests, attempts, onAddTest, onL
                     )}
                   </div>
                   
-                  {test.facultyId === user.data?.id && (
-                    <div className="pt-4 border-t border-black/5">
-                      {selectedTestForInvite === test.id ? (
-                        <div className="space-y-3">
-                          <select 
-                            value={inviteFacultyId}
-                            onChange={e => setInviteFacultyId(e.target.value)}
-                            className="w-full p-2 border border-black/10 rounded-md text-sm"
-                          >
-                            <option value="">Select Faculty to Invite</option>
-                            {faculties.filter(f => f.id !== user.data?.id && !test.collaborators?.includes(f.id)).map(f => (
-                              <option key={f.id} value={f.id}>{f.name} ({f.id})</option>
-                            ))}
-                          </select>
-                          <div className="flex gap-2">
-                            <button 
-                              onClick={() => handleInviteCollaborator(test.id)}
-                              className="flex-1 bg-ink text-white py-2 rounded-md text-xs font-medium hover:bg-slate-800"
-                            >
-                              Send Invite
-                            </button>
-                            <button 
-                              onClick={() => setSelectedTestForInvite(null)}
-                              className="flex-1 bg-paper text-slate-600 py-2 rounded-md text-xs font-medium border border-black/10"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
+                  <div className="flex flex-col gap-3 pt-4 border-t border-black/5">
+                     <div className="flex gap-2">
+                      {test.isManualStart && test.status === 'scheduled' && (
                         <button 
-                          onClick={() => setSelectedTestForInvite(test.id)}
-                          className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-ink hover:bg-black/5 rounded-lg transition-colors border border-black/10"
+                          onClick={() => handleStartTest(test.id)}
+                          className="flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg transition-colors border border-emerald-100"
                         >
-                          <UserPlus size={16} /> Invite Collaborator
+                          <Play size={14} /> Start
+                        </button>
+                      )}
+                      <button 
+                        onClick={() => handleEditTest(test)}
+                        className="flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors border border-black/5"
+                      >
+                        <Edit3 size={14} /> Edit
+                      </button>
+                      {isAdmin && (
+                        <button 
+                          onClick={() => handleDeleteTest(test.id)}
+                          className="flex items-center justify-center p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-red-100"
+                          title="Delete Test"
+                        >
+                          <Trash2 size={14} />
                         </button>
                       )}
                     </div>
-                  )}
+
+                    <button 
+                      onClick={() => {
+                        setSelectedLiveTest(test);
+                        setActiveTab('live-status');
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg transition-colors"
+                    >
+                      <BarChart3 size={16} /> Live Status
+                    </button>
+
+                    <div className="flex items-center justify-between p-2 bg-paper/50 rounded-lg border border-black/5">
+                      <span className="text-xs font-medium text-slate-600">Student Review</span>
+                      <button 
+                        onClick={async () => {
+                          try {
+                            await supabaseService.updateTestReviewStatus(test.id, !test.isReviewEnabled);
+                            // Simple way to refresh: update local state or reload
+                            window.location.reload();
+                          } catch (err) {
+                            alert('Failed to update review status');
+                          }
+                        }}
+                        className={`px-3 py-1 rounded-md text-[10px] uppercase tracking-wider font-bold transition-colors ${test.isReviewEnabled ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-red-100 text-red-700 border border-red-200'}`}
+                      >
+                        {test.isReviewEnabled ? 'Enabled' : 'Disabled'}
+                      </button>
+                    </div>
+
+                    {test.facultyId === user.data?.id && (
+                      <div className="pt-2">
+                        {selectedTestForInvite === test.id ? (
+                          <div className="space-y-3">
+                            <select 
+                              value={inviteFacultyId}
+                              onChange={e => setInviteFacultyId(e.target.value)}
+                              className="w-full p-2 border border-black/10 rounded-md text-sm"
+                            >
+                              <option value="">Select Faculty to Invite</option>
+                              {faculties.filter(f => f.id !== user.data?.id && !test.collaborators?.includes(f.id)).map(f => (
+                                <option key={f.id} value={f.id}>{f.name} ({f.id})</option>
+                              ))}
+                            </select>
+                            <div className="flex gap-2">
+                              <button 
+                                onClick={() => handleInviteCollaborator(test.id)}
+                                className="flex-1 bg-ink text-white py-2 rounded-md text-xs font-medium hover:bg-slate-800"
+                              >
+                                Send Invite
+                              </button>
+                              <button 
+                                onClick={() => setSelectedTestForInvite(null)}
+                                className="flex-1 bg-paper text-slate-600 py-2 rounded-md text-xs font-medium border border-black/10"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button 
+                            onClick={() => setSelectedTestForInvite(test.id)}
+                            className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-ink hover:bg-black/5 rounded-lg transition-colors border border-black/10"
+                          >
+                            <UserPlus size={16} /> Invite Collaborator
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
-              {tests.length === 0 && (
+              {myTests.length === 0 && (
                 <div className="col-span-full text-center p-12 bg-white rounded-xl border border-dashed border-slate-300 text-slate-500">
                   No tests created yet. Click "Create Test" to begin.
                 </div>
@@ -1055,6 +1506,161 @@ export default function TeacherDashboard({ user, tests, attempts, onAddTest, onL
               </button>
             </div>
           </div>
+        )}
+
+        {activeTab === 'live-status' && selectedLiveTest && (
+          <div className="max-w-6xl mx-auto">
+            <div className="flex justify-between items-center mb-12">
+              <div className="flex items-center gap-6">
+                <button 
+                  onClick={() => setActiveTab('manage')}
+                  className="p-3 hover:bg-black/5 rounded-full transition-colors"
+                >
+                  <ChevronRight className="rotate-180" size={24} />
+                </button>
+                <div>
+                  <h2 className="text-4xl font-serif text-ink">{selectedLiveTest.title}</h2>
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] uppercase tracking-widest font-bold ${
+                      selectedLiveTest.status === 'live' ? 'bg-emerald-100 text-emerald-600' : 
+                      selectedLiveTest.status === 'completed' ? 'bg-slate-100 text-slate-600' : 'bg-amber-100 text-amber-600'
+                    }`}>
+                      <Activity size={12} /> {selectedLiveTest.status}
+                    </span>
+                    <span className="text-slate-400 text-xs uppercase tracking-widest font-semibold">{selectedLiveTest.subject} • {selectedLiveTest.topic}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                {selectedLiveTest.status === 'scheduled' && (
+                  <button 
+                    onClick={() => handleStartTest(selectedLiveTest.id)}
+                    className="flex items-center gap-2 px-8 py-4 bg-emerald-600 text-white rounded-2xl text-sm font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200"
+                  >
+                    <Play size={18} /> Start Test Now
+                  </button>
+                )}
+                {selectedLiveTest.status === 'live' && (
+                  <button 
+                    onClick={() => handleEndTest(selectedLiveTest.id)}
+                    className="flex items-center gap-2 px-8 py-4 bg-red-600 text-white rounded-2xl text-sm font-bold hover:bg-red-700 transition-all shadow-lg shadow-red-200"
+                  >
+                    <Lock size={18} /> End Assessment
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 mb-12">
+              <div className="bg-white p-8 rounded-3xl border border-black/5 shadow-sm">
+                <div className="text-slate-400 text-[10px] uppercase tracking-widest font-bold mb-2">Total Students</div>
+                <div className="text-4xl font-serif">{students.length}</div>
+                <div className="text-xs text-slate-400 mt-2">Registered in Faculty</div>
+              </div>
+              <div className="bg-white p-8 rounded-3xl border border-black/5 shadow-sm">
+                <div className="text-slate-400 text-[10px] uppercase tracking-widest font-bold mb-2">Attempts</div>
+                <div className="text-4xl font-serif">{attempts.filter(a => a.testId === selectedLiveTest.id).length}</div>
+                <div className="text-xs text-emerald-500 mt-2 flex items-center gap-1">
+                  <Activity size={12} /> {students.length > 0 ? ((attempts.filter(a => a.testId === selectedLiveTest.id).length / students.length) * 100).toFixed(0) : 0}% Participation
+                </div>
+              </div>
+              <div className="bg-white p-8 rounded-3xl border border-black/5 shadow-sm">
+                <div className="text-slate-400 text-[10px] uppercase tracking-widest font-bold mb-2">Average Score</div>
+                <div className="text-4xl font-serif">
+                  {attempts.filter(a => a.testId === selectedLiveTest.id).length > 0 
+                    ? (attempts.filter(a => a.testId === selectedLiveTest.id).reduce((acc, a) => acc + a.score, 0) / attempts.filter(a => a.testId === selectedLiveTest.id).length).toFixed(1)
+                    : 0}
+                </div>
+                <div className="text-xs text-slate-400 mt-2">Out of {selectedLiveTest.questions.length}</div>
+              </div>
+              <div className="bg-white p-8 rounded-3xl border border-black/5 shadow-sm">
+                <div className="text-slate-400 text-[10px] uppercase tracking-widest font-bold mb-2">Pass Rate</div>
+                <div className="text-4xl font-serif">
+                  {attempts.filter(a => a.testId === selectedLiveTest.id).length > 0
+                    ? Math.round((attempts.filter(a => a.testId === selectedLiveTest.id && a.passed).length / attempts.filter(a => a.testId === selectedLiveTest.id).length) * 100)
+                    : 0}%
+                </div>
+                <div className="text-xs text-emerald-500 mt-2">Success Metric</div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-black/5 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-black/5 bg-paper/30">
+                <h3 className="text-lg font-serif font-semibold text-ink">Student Activity Feed</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-black/5">
+                      <th className="px-8 py-4 text-[10px] uppercase tracking-widest font-bold text-slate-400">Student Name</th>
+                      <th className="px-8 py-4 text-[10px] uppercase tracking-widest font-bold text-slate-400">Roll No</th>
+                      <th className="px-8 py-4 text-[10px] uppercase tracking-widest font-bold text-slate-400">Status</th>
+                      <th className="px-8 py-4 text-[10px] uppercase tracking-widest font-bold text-slate-400">Answered</th>
+                      <th className="px-8 py-4 text-[10px] uppercase tracking-widest font-bold text-slate-400">Score</th>
+                      <th className="px-8 py-4 text-[10px] uppercase tracking-widest font-bold text-slate-400">Progress</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-black/5">
+                    {students.map(student => {
+                      const attempt = attempts.find(a => a.testId === selectedLiveTest.id && a.usn === student.usn);
+                      const session = liveSessions.find(s => s.studentId === student.usn);
+                      
+                      return (
+                        <tr key={student.usn} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-8 py-5 font-medium">{student.name}</td>
+                          <td className="px-8 py-5 text-slate-500 font-mono text-xs">{student.usn}</td>
+                          <td className="px-8 py-5">
+                            {attempt ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-widest">
+                                Completed
+                              </span>
+                            ) : session ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-widest">
+                                In Progress
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
+                                Not Started
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-8 py-5">
+                            {session ? (
+                              <div className="flex items-baseline gap-1">
+                                <span className="text-lg font-serif">{session.answeredCount}</span>
+                                <span className="text-xs text-slate-400">/ {selectedLiveTest.questions.length}</span>
+                              </div>
+                            ) : attempt ? (
+                              <span className="text-emerald-600 font-bold text-xs uppercase tracking-widest">All</span>
+                            ) : '-'}
+                          </td>
+                          <td className="px-8 py-5">
+                            {attempt ? (
+                              <div className="flex items-baseline gap-1">
+                                <span className="text-lg font-serif">{attempt.score}</span>
+                                <span className="text-xs text-slate-400">/ {attempt.totalMarks}</span>
+                              </div>
+                            ) : '-'}
+                          </td>
+                          <td className="px-8 py-5">
+                            <div className="w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full transition-all duration-1000 ${
+                                  attempt ? 'bg-emerald-500 w-full' : 
+                                  session ? 'bg-amber-500' : 'bg-slate-200 w-0'
+                                }`}
+                                style={session && !attempt ? { width: `${((session.currentQuestionIndex + 1) / selectedLiveTest.questions.length) * 100}%` } : {}}
+                              ></div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
         )}
 
         {activeTab === 'branch-reg' && (

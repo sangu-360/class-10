@@ -4,6 +4,7 @@ import QuestionPalette from './QuestionPalette';
 import { Clock, Play, AlertCircle, Loader2, Maximize, ShieldAlert } from 'lucide-react';
 import { evaluateCode } from '../services/groqService';
 import { gradeCodingAnswer } from '../services/geminiService';
+import { supabaseService } from '../services/supabaseService';
 
 interface Props {
   test: Test;
@@ -34,6 +35,45 @@ export default function TestInterface({ test, studentName, studentData, onSubmit
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const activeQuestion = test.questions[activeIdx];
+
+  // Live Session Tracking
+  useEffect(() => {
+    if (!studentData?.usn) return;
+    
+    const answeredCount = Object.keys(answers).length;
+    
+    const updateLive = async () => {
+      try {
+        await supabaseService.updateLiveSession({
+          testId: test.id,
+          studentId: studentData.usn,
+          studentName: studentName,
+          currentQuestionIndex: activeIdx,
+          answeredCount: answeredCount,
+          lastActiveAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error('Failed to update live session:', err);
+      }
+    };
+
+    updateLive();
+
+    // Cleanup on unmount or submission
+    return () => {
+      if (isSubmitting) {
+        supabaseService.deleteLiveSession(test.id, studentData.usn).catch(console.error);
+      }
+    };
+  }, [activeIdx, studentData?.usn, studentName, test.id, isSubmitting, answers]);
+
+  // Malpractice Auto-Submit
+  useEffect(() => {
+    if (malpracticeCount >= 3 && !isSubmitting) {
+      confirmSubmit();
+      alert('Assessment auto-submitted due to multiple security violations.');
+    }
+  }, [malpracticeCount, isSubmitting]);
 
   // Anti-Malpractice: Tab Switch Detection
   useEffect(() => {

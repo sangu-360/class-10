@@ -69,6 +69,9 @@ CREATE TABLE IF NOT EXISTS tests (
     scheduled_time TIMESTAMP WITH TIME ZONE,
     target_branch TEXT, -- Optional targeting
     target_section TEXT, -- Optional targeting
+    is_review_enabled BOOLEAN DEFAULT false,
+    status TEXT DEFAULT 'scheduled', -- 'draft', 'scheduled', 'live', 'completed'
+    is_manual_start BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
 );
 ALTER TABLE tests ADD COLUMN IF NOT EXISTS topic TEXT;
@@ -79,6 +82,9 @@ ALTER TABLE tests ADD COLUMN IF NOT EXISTS faculty_id TEXT;
 ALTER TABLE tests ADD COLUMN IF NOT EXISTS scheduled_time TIMESTAMP WITH TIME ZONE;
 ALTER TABLE tests ADD COLUMN IF NOT EXISTS target_branch TEXT;
 ALTER TABLE tests ADD COLUMN IF NOT EXISTS target_section TEXT;
+ALTER TABLE tests ADD COLUMN IF NOT EXISTS is_review_enabled BOOLEAN DEFAULT false;
+ALTER TABLE tests ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'scheduled';
+ALTER TABLE tests ADD COLUMN IF NOT EXISTS is_manual_start BOOLEAN DEFAULT false;
 ALTER TABLE tests ADD COLUMN IF NOT EXISTS collaborators TEXT[] DEFAULT '{}';
 
 -- 6. Questions Table
@@ -128,6 +134,18 @@ CREATE TABLE IF NOT EXISTS collaboration_requests (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
 );
 
+-- 9. Live Sessions Table
+CREATE TABLE IF NOT EXISTS live_sessions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    test_id UUID REFERENCES tests(id) ON DELETE CASCADE,
+    student_id TEXT NOT NULL,
+    student_name TEXT NOT NULL,
+    current_question_index INTEGER DEFAULT 0,
+    answered_count INTEGER DEFAULT 0,
+    last_active_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()),
+    UNIQUE(test_id, student_id)
+);
+
 -- ==========================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- ==========================================
@@ -142,6 +160,7 @@ ALTER TABLE tests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE test_attempts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE collaboration_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE live_sessions ENABLE ROW LEVEL SECURITY;
 
 -- Helper to create policy if not exists
 DO $$
@@ -222,6 +241,20 @@ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow update on collaboration_requests') THEN
         CREATE POLICY "Allow update on collaboration_requests" ON collaboration_requests FOR UPDATE USING (true);
+    END IF;
+
+    -- 10. Live Sessions
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public read on live_sessions') THEN
+        CREATE POLICY "Allow public read on live_sessions" ON live_sessions FOR SELECT USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow insert on live_sessions') THEN
+        CREATE POLICY "Allow insert on live_sessions" ON live_sessions FOR INSERT WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow update on live_sessions') THEN
+        CREATE POLICY "Allow update on live_sessions" ON live_sessions FOR UPDATE USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow delete on live_sessions') THEN
+        CREATE POLICY "Allow delete on live_sessions" ON live_sessions FOR DELETE USING (true);
     END IF;
 END $$;
 

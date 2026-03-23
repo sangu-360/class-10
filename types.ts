@@ -21,6 +21,8 @@ export interface Question {
   initialCode?: string;
 }
 
+export type TestStatus = 'draft' | 'scheduled' | 'live' | 'completed';
+
 export interface Test {
   id: string;
   title: string;
@@ -37,6 +39,9 @@ export interface Test {
   passMarks: number;
   targetBranch?: string;
   targetSection?: string;
+  isReviewEnabled?: boolean;
+  status?: TestStatus;
+  isManualStart?: boolean;
 }
 
 export type QuestionStatus = 'not_visited' | 'not_answered' | 'answered' | 'marked_for_review' | 'answered_marked_for_review';
@@ -99,4 +104,14 @@ export interface CollaborationRequest {
   receiverId: string;
   status: 'pending' | 'accepted' | 'rejected';
   createdAt: string;
+}
+
+export interface LiveSession {
+  id: string;
+  testId: string;
+  studentId: string;
+  studentName: string;
+  currentQuestionIndex: number;
+  answeredCount: number;
+  lastActiveAt: string;
 }

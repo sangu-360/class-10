@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { Test, TestAttempt, Faculty, SubjectReg, StudentReg, BranchReg, Role } from '../types';
+import { Test, TestAttempt, Faculty, SubjectReg, StudentReg, BranchReg, Role, LiveSession, TestStatus } from '../types';
 
 export const supabaseService = {
   // Admin Settings
@@ -143,6 +143,9 @@ export const supabaseService = {
       passMarks: t.pass_marks,
       targetBranch: t.target_branch,
       targetSection: t.target_section,
+      isReviewEnabled: t.is_review_enabled,
+      status: t.status || 'scheduled',
+      isManualStart: t.is_manual_start || false,
       questions: questionsData.filter((q: any) => q.test_id === t.id).map((q: any) => ({
         id: q.id,
         type: q.type,
@@ -170,7 +173,10 @@ export const supabaseService = {
       scheduled_time: test.scheduledTime,
       pass_marks: test.passMarks,
       target_branch: test.targetBranch,
-      target_section: test.targetSection
+      target_section: test.targetSection,
+      is_review_enabled: test.isReviewEnabled || false,
+      status: test.status || 'scheduled',
+      is_manual_start: test.isManualStart || false
     }]).select().single();
 
     if (testError) throw testError;
@@ -326,6 +332,123 @@ export const supabaseService = {
         if (testUpdateError) throw testUpdateError;
       }
     }
+  },
+
+  async updateTestReviewStatus(testId: string, isEnabled: boolean) {
+    const { error } = await supabase
+      .from('tests')
+      .update({ is_review_enabled: isEnabled })
+      .eq('id', testId);
+    if (error) throw error;
+  },
+
+  async updateTestStatus(testId: string, status: TestStatus) {
+    const { error } = await supabase
+      .from('tests')
+      .update({ status })
+      .eq('id', testId);
+    if (error) throw error;
+  },
+
+  async updateTest(test: Test) {
+    const { error: testError } = await supabase.from('tests').update({
+      title: test.title,
+      topic: test.topic,
+      subject_code: test.subjectCode,
+      subject_name: test.subjectName,
+      faculty_name: test.facultyName,
+      faculty_id: test.facultyId,
+      collaborators: test.collaborators,
+      subject: test.subject,
+      duration_minutes: test.durationMinutes,
+      scheduled_time: test.scheduledTime,
+      pass_marks: test.passMarks,
+      target_branch: test.targetBranch,
+      target_section: test.targetSection,
+      is_review_enabled: test.isReviewEnabled,
+      status: test.status,
+      is_manual_start: test.isManualStart
+    }).eq('id', test.id);
+
+    if (testError) throw testError;
+
+    // For questions, we delete and re-insert for simplicity in update
+    const { error: deleteError } = await supabase.from('questions').delete().eq('test_id', test.id);
+    if (deleteError) throw deleteError;
+
+    const questionsToInsert = test.questions.map(q => ({
+      test_id: test.id,
+      type: q.type,
+      text: q.text,
+      options: q.options,
+      correct_answer: q.correctAnswer,
+      marks: q.marks,
+      explanation: q.explanation,
+      initial_code: q.initialCode
+    }));
+
+    if (questionsToInsert.length > 0) {
+      const { error: qError } = await supabase.from('questions').insert(questionsToInsert);
+      if (qError) throw qError;
+    }
+  },
+
+  // Live Sessions
+  async deleteTest(testId: string) {
+    const { error } = await supabase.from('tests').delete().eq('id', testId);
+    if (error) throw error;
+  },
+
+  async updateLiveSession(session: Partial<LiveSession>) {
+    const { error } = await supabase
+      .from('live_sessions')
+      .upsert({
+        test_id: session.testId,
+        student_id: session.studentId,
+        student_name: session.studentName,
+        current_question_index: session.currentQuestionIndex,
+        answered_count: session.answeredCount || 0,
+        last_active_at: session.lastActiveAt || new Date().toISOString()
+      }, { onConflict: 'test_id, student_id' });
+    if (error) throw error;
+  },
+
+  async getLiveSessions(testId: string) {
+    const { data, error } = await supabase
+      .from('live_sessions')
+      .select('*')
+      .eq('test_id', testId);
+    if (error) throw error;
+    return (data || []).map((s: any) => ({
+      id: s.id,
+      testId: s.test_id,
+      studentId: s.student_id,
+      studentName: s.student_name,
+      currentQuestionIndex: s.current_question_index,
+      answeredCount: s.answered_count || 0,
+      lastActiveAt: s.last_active_at
+    }));
+  },
+
+  subscribeToLiveSessions(testId: string, callback: (payload: any) => void) {
+    return supabase
+      .channel(`live_sessions:test_id=eq.${testId}`)
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'live_sessions',
+        filter: `test_id=eq.${testId}`
+      }, callback)
+      .subscribe();
+  },
+
+  async deleteLiveSession(testId: string, studentId: string) {
+    const { error } = await supabase
+      .from('live_sessions')
+      .delete()
+      .eq('test_id', testId)
+      .eq('student_id', studentId);
+    if (error) throw error;
   },
 
   async clearCollaborators(testId: string) {

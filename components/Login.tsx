@@ -10,7 +10,6 @@ interface LoginProps {
 }
 
 export default function Login({ onLogin }: LoginProps) {
-  const [role, setRole] = useState<Role>('student');
   const [showPinDialog, setShowPinDialog] = useState(false);
   
   // Login State
@@ -75,24 +74,6 @@ export default function Login({ onLogin }: LoginProps) {
             <p className="text-slate-500 text-sm">
               Enter your credentials to access the Atria portal.
             </p>
-          </div>
-
-          {/* Role Selector */}
-          <div className="flex gap-4 mb-8">
-            <button
-              type="button"
-              onClick={() => setRole('student')}
-              className={`flex-1 py-3 border-b-2 text-sm font-medium transition-colors ${role === 'student' ? 'border-ink text-ink' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-            >
-              Student
-            </button>
-            <button
-              type="button"
-              onClick={() => setRole('teacher')}
-              className={`flex-1 py-3 border-b-2 text-sm font-medium transition-colors ${role === 'teacher' ? 'border-ink text-ink' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-            >
-              Faculty
-            </button>
           </div>
 
           {error && (

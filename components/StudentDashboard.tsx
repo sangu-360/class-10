@@ -35,6 +35,9 @@ export default function StudentDashboard({ studentName, studentData, tests, atte
     return true;
   });
 
+  const availableTests = filteredTests.filter(test => !attempts.some(a => a.testId === test.id));
+  const previousTests = filteredTests.filter(test => attempts.some(a => a.testId === test.id));
+
   return (
     <div className="min-h-screen bg-paper font-sans text-ink">
       {/* Header */}
@@ -57,13 +60,11 @@ export default function StudentDashboard({ studentName, studentData, tests, atte
       <main className="max-w-6xl mx-auto p-8 lg:p-12">
         <div className="mb-12">
           <h2 className="text-4xl font-serif font-light text-ink mb-2">Available Assessments</h2>
-          <p className="text-slate-500 text-sm">Select a test to begin or review your past attempts.</p>
+          <p className="text-slate-500 text-sm">Select a test to begin.</p>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {filteredTests.map(test => {
-            const attempt = attempts.find(a => a.testId === test.id);
-            
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
+          {availableTests.map(test => {
             return (
               <div key={test.id} className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-black/5 overflow-hidden flex flex-col transition-transform hover:-translate-y-1 duration-300">
                 <div className="p-8 flex-1">
@@ -85,32 +86,10 @@ export default function StudentDashboard({ studentName, studentData, tests, atte
                       </div>
                     )}
                   </div>
-                  
-                  {attempt && (
-                    <div className={`mt-auto p-4 rounded-xl border ${attempt.passed ? 'bg-emerald-50/50 border-emerald-100' : 'bg-red-50/50 border-red-100'}`}>
-                      <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-500 mb-2">Previous Attempt</p>
-                      <div className="flex justify-between items-end">
-                        <div className="flex items-baseline gap-1">
-                          <span className="font-serif text-2xl">{attempt.score}</span>
-                          <span className="text-sm text-slate-500">/ {attempt.totalMarks}</span>
-                        </div>
-                        <span className={`text-[10px] uppercase tracking-widest font-bold ${attempt.passed ? 'text-emerald-600' : 'text-red-600'}`}>
-                          {attempt.passed ? 'Passed' : 'Failed'}
-                        </span>
-                      </div>
-                    </div>
-                  )}
                 </div>
                 
                 <div className="p-4 border-t border-black/5 bg-slate-50/50">
-                  {attempt ? (
-                    <button 
-                      onClick={() => onReviewTest(test, attempt)}
-                      className="w-full flex items-center justify-center gap-2 py-3 bg-white border border-black/10 text-ink rounded-xl hover:bg-slate-50 text-sm font-medium transition-colors"
-                    >
-                      <CheckCircle size={16} /> Review Answers
-                    </button>
-                  ) : isExpired(test) ? (
+                  {isExpired(test) ? (
                     <button 
                       disabled
                       className="w-full flex items-center justify-center gap-2 py-3 bg-red-50 text-red-500 rounded-xl text-sm font-medium cursor-not-allowed border border-red-100"
@@ -136,11 +115,66 @@ export default function StudentDashboard({ studentName, studentData, tests, atte
               </div>
             );
           })}
-          {filteredTests.length === 0 && (
-            <div className="col-span-full flex flex-col items-center justify-center py-24 bg-white rounded-2xl border border-dashed border-black/10 text-slate-500">
-              <BookOpen size={48} className="text-slate-300 mb-4" />
-              <p className="font-serif text-xl text-ink">No assessments available</p>
-              <p className="text-sm mt-2">Check back later for new tests.</p>
+          {availableTests.length === 0 && (
+            <div className="col-span-full flex flex-col items-center justify-center py-12 bg-white rounded-2xl border border-dashed border-black/10 text-slate-500">
+              <BookOpen size={32} className="text-slate-300 mb-4" />
+              <p className="font-serif text-lg text-ink">No new assessments available</p>
+            </div>
+          )}
+        </div>
+
+        <div className="mb-12">
+          <h2 className="text-4xl font-serif font-light text-ink mb-2">Previous Tests</h2>
+          <p className="text-slate-500 text-sm">Review your performance in completed assessments.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {previousTests.map(test => {
+            const attempt = attempts.find(a => a.testId === test.id)!;
+            
+            return (
+              <div key={test.id} className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-black/5 overflow-hidden flex flex-col opacity-90 grayscale-[0.5]">
+                <div className="p-8 flex-1">
+                  <div className="flex justify-between items-start mb-6">
+                    <h3 className="font-serif text-2xl text-ink leading-tight">{test.title}</h3>
+                  </div>
+                  
+                  <div className={`p-4 rounded-xl border ${attempt.passed ? 'bg-emerald-50/50 border-emerald-100' : 'bg-red-50/50 border-red-100'}`}>
+                    <div className="flex justify-between items-end">
+                      <div className="flex items-baseline gap-1">
+                        <span className="font-serif text-2xl">{attempt.score}</span>
+                        <span className="text-sm text-slate-500">/ {attempt.totalMarks}</span>
+                      </div>
+                      <span className={`text-[10px] uppercase tracking-widest font-bold ${attempt.passed ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {attempt.passed ? 'Passed' : 'Failed'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="p-4 border-t border-black/5 bg-slate-50/50">
+                  {test.isReviewEnabled ? (
+                    <button 
+                      onClick={() => onReviewTest(test, attempt)}
+                      className="w-full flex items-center justify-center gap-2 py-3 bg-white border border-black/10 text-ink rounded-xl hover:bg-slate-50 text-sm font-medium transition-colors"
+                    >
+                      <CheckCircle size={16} /> Review Answers
+                    </button>
+                  ) : (
+                    <button 
+                      disabled
+                      className="w-full flex items-center justify-center gap-2 py-3 bg-slate-100 text-slate-400 rounded-xl text-sm font-medium cursor-not-allowed border border-black/5"
+                    >
+                      <AlertCircle size={16} /> Review Disabled by Faculty
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {previousTests.length === 0 && (
+            <div className="col-span-full flex flex-col items-center justify-center py-12 bg-white rounded-2xl border border-dashed border-black/10 text-slate-500">
+              <p className="font-serif text-lg text-ink">No previous tests found</p>
             </div>
           )}
         </div>
