@@ -17,7 +17,7 @@ export default defineConfig(({ mode }) => {
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GROQ_API_KEY': JSON.stringify(env.GROQ_API_KEY)
+        'process.env.GROQ_API_KEY': JSON.stringify(env.GROQ_API_KEY || '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')
       },
       resolve: {
         alias: {
