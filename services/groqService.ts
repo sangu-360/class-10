@@ -1,9 +1,8 @@
 import OpenAI from 'openai';
 
-// Client-side demo: Using the provided Groq API key directly as requested.
-// In a production app, this should be moved to a backend server to secure the key.
+// Client-side: Using Groq API key from environment variables.
 const openai = new OpenAI({
-  apiKey: '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',
+  apiKey: process.env.GROQ_API_KEY || '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',
   baseURL: 'https://api.groq.com/openai/v1',
   dangerouslyAllowBrowser: true
 });

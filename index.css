@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Georgia", "Times New Roman", serif;
+  --font-mono: "Courier New", Courier, monospace;
+  
+  --color-paper: #f5f2ed;
+  --color-ink: #1a1a1a;
+  --color-olive: #5A5A40;
+  --color-sand: #e8e4db;
+}
+
+/* Custom scrollbar for a sleek IDE look */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f5f2ed; 
+}
+::-webkit-scrollbar-thumb {
+  background: #d1cbc1; 
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a296; 
+}
+
+body {
+  background-color: #f5f2ed;
+  color: #1a1a1a;
+  font-family: 'Inter', sans-serif;
+}
+
+input, textarea, select {
+  color: #1a1a1a;
+  background-color: #ffffff;
+}
